@@ -1,0 +1,16 @@
+services:
+  seedghost:
+    build: .
+    container_name: seedghost
+    ports:
+      - "8333:8333"
+    volumes:
+      - seedghost-data:/app/data
+    environment:
+      - SEEDGHOST_LISTEN_ADDR=:8333
+      - SEEDGHOST_PROWLARR_URL=${PROWLARR_URL:-}
+      - SEEDGHOST_PROWLARR_API_KEY=${PROWLARR_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  seedghost-data:

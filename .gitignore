@@ -1,0 +1,17 @@
+seedghost
+*.exe
+*.db
+coverage.out
+coverage.html
+data/
+config.json
+
+# Frontend
+frontend/node_modules/
+web/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

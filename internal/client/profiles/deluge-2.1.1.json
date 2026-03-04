@@ -1,0 +1,13 @@
+{
+  "name": "Deluge 2.1.1",
+  "peerIdPrefix": "-DE2110-",
+  "peerIdSuffixCharset": "alphanumeric",
+  "userAgent": "Deluge/2.1.1",
+  "keyLength": 8,
+  "keyCharset": "hex_lower",
+  "queryParamOrder": ["info_hash","peer_id","ip","port","uploaded","downloaded","left","event","key","numwant","compact"],
+  "portRange": {"min": 6881, "max": 6999},
+  "supportsCompact": true,
+  "numwantDefault": 200,
+  "extraHeaders": {"Accept-Encoding": "gzip"}
+}
