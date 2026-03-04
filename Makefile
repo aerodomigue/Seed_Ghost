@@ -1,57 +1,53 @@
-.PHONY: all build run test test-cover test-race test-all frontend clean docker
+.PHONY: all build run test test-cover test-race test-all frontend clean docker up down help
 
 BINARY=seedghost
 GO=go
 NPM=npm
 
-all: build
+all: build ## Build everything (frontend + backend)
 
-# Build frontend
-frontend:
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+frontend: ## Build frontend
 	cd frontend && $(NPM) install && $(NPM) run build
 
-# Build Go binary (requires frontend to be built first)
-build: frontend
+build: frontend ## Build Go binary (includes frontend)
 	$(GO) build -o $(BINARY) ./cmd/seedghost/
 
-# Run in development mode
-run:
+run: ## Run in development mode
 	$(GO) run ./cmd/seedghost/
 
-# Run backend tests
-test:
+dev: ## Run frontend dev server + backend concurrently
+	@echo "Start backend:  go run ./cmd/seedghost/"
+	@echo "Start frontend: cd frontend && npm run dev"
+	@echo "Then open http://localhost:5173"
+
+test: ## Run backend tests
 	$(GO) test ./...
 
-# Run tests with coverage
-test-cover:
+test-cover: ## Run tests with coverage report
 	$(GO) test -coverprofile=coverage.out ./...
 	$(GO) tool cover -html=coverage.out -o coverage.html
 
-# Run tests with race detector
-test-race:
+test-race: ## Run tests with race detector
 	$(GO) test -race ./...
 
-# Run frontend tests
-test-frontend:
+test-frontend: ## Run frontend tests
 	cd frontend && $(NPM) test -- --run
 
-# Run all tests
-test-all: test test-frontend
+test-all: test test-frontend ## Run all tests (backend + frontend)
 
-# Build Docker image
-docker:
+docker: ## Build Docker image
 	docker build -t seedghost .
 
-# Docker compose up
-up:
+up: ## Start with docker compose
 	docker compose up -d
 
-# Docker compose down
-down:
+down: ## Stop docker compose
 	docker compose down
 
-# Clean build artifacts
-clean:
+clean: ## Clean build artifacts
 	rm -f $(BINARY) coverage.out coverage.html
 	rm -rf web/dist
 	rm -rf frontend/node_modules
