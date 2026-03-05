@@ -1,26 +1,23 @@
 import { usePolling } from '../hooks/useApi'
-import { getStatsOverview, getTorrents } from '../lib/api'
+import { getStatsOverview, getTorrents, getStatsHistory } from '../lib/api'
 import { formatBytes } from '../lib/utils'
 import StatsCard from '../components/StatsCard'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { useState, useEffect } from 'react'
 
 export default function Dashboard() {
   const { data: stats } = usePolling(getStatsOverview, 5000)
-  const { data: torrents } = usePolling(getTorrents, 5000)
-  const [uploadHistory, setUploadHistory] = useState<{ time: string; uploaded: number }[]>([])
-
-  useEffect(() => {
-    if (stats) {
-      setUploadHistory((prev) => {
-        const next = [...prev, { time: new Date().toLocaleTimeString(), uploaded: stats.totalUploaded }]
-        return next.slice(-30) // Keep last 30 data points
-      })
-    }
-  }, [stats])
+  const { data: torrents } = usePolling(getTorrents, 1000)
+  const { data: history } = usePolling(() => getStatsHistory(24), 10000)
 
   const activeTorrents = torrents?.filter((t) => t.active) || []
   const totalLeechers = activeTorrents.reduce((sum, t) => sum + t.leechers, 0)
+  const totalSpeed = activeTorrents.reduce((sum, t) => sum + (t.uploadSpeed ?? 0), 0)
+
+  const chartData = (history || []).map((p) => ({
+    time: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    uploaded: p.totalUploaded,
+    leechers: p.totalLeechers,
+  }))
 
   return (
     <div className="space-y-6">
@@ -42,17 +39,18 @@ export default function Dashboard() {
           sub="across all torrents"
         />
         <StatsCard
-          label="Active Sessions"
-          value={String(stats?.activeTorrents ?? 0)}
+          label="Upload Speed"
+          value={`${formatBytes(totalSpeed)}/s`}
+          sub={`${stats?.activeTorrents ?? 0} active sessions`}
         />
       </div>
 
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-gray-400 mb-4">Upload Progress</h3>
+        <h3 className="text-sm font-medium text-gray-400 mb-4">Upload Progress (24h)</h3>
         <div className="h-64">
-          {uploadHistory.length > 1 ? (
+          {chartData.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={uploadHistory}>
+              <AreaChart data={chartData}>
                 <XAxis dataKey="time" tick={{ fill: '#6b7280', fontSize: 12 }} />
                 <YAxis
                   tick={{ fill: '#6b7280', fontSize: 12 }}

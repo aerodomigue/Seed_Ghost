@@ -10,11 +10,9 @@ export async function getTorrents(): Promise<Torrent[]> {
   return data
 }
 
-export async function addTorrent(file: File, clientProfile: string, autoStart: boolean): Promise<{ id: number }> {
+export async function addTorrent(file: File): Promise<{ id: number }> {
   const form = new FormData()
   form.append('torrent', file)
-  form.append('clientProfile', clientProfile)
-  form.append('autoStart', String(autoStart))
   const { data } = await api.post('/torrents', form)
   return data
 }
@@ -33,6 +31,18 @@ export async function stopTorrent(id: number): Promise<void> {
 
 export async function getStatsOverview(): Promise<StatsOverview> {
   const { data } = await api.get('/stats/overview')
+  return data
+}
+
+export interface StatsHistoryPoint {
+  timestamp: string
+  totalUploaded: number
+  totalLeechers: number
+  totalSeeders: number
+}
+
+export async function getStatsHistory(hours = 24): Promise<StatsHistoryPoint[]> {
+  const { data } = await api.get('/stats/history', { params: { hours } })
   return data
 }
 
@@ -81,4 +91,31 @@ export async function updateProwlarrConfig(config: { url: string; apiKey: string
 
 export async function triggerProwlarrFetch(): Promise<void> {
   await api.post('/prowlarr/fetch')
+}
+
+export interface ProwlarrIndexerFull {
+  id: number
+  name: string
+  protocol: string
+  enable: boolean
+  implementationName: string
+  selected: boolean
+  maxUploadSpeedKbs: number | null
+  fetchIntervalMinutes: number | null
+  maxSlots: number | null
+  seedTimeHours: number | null
+}
+
+export async function fetchProwlarrIndexers(): Promise<ProwlarrIndexerFull[]> {
+  const { data } = await api.post('/prowlarr/indexers')
+  return data
+}
+
+export async function saveProwlarrIndexers(selections: { id: number; name: string; selected: boolean; maxUploadSpeedKbs: number | null; fetchIntervalMinutes: number | null; maxSlots: number | null; seedTimeHours: number | null }[]): Promise<void> {
+  await api.put('/prowlarr/indexers', selections)
+}
+
+export async function getSavedProwlarrIndexers(): Promise<{ id: number; name: string; enabled: boolean }[]> {
+  const { data } = await api.get('/prowlarr/indexers')
+  return data
 }

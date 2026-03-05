@@ -12,8 +12,11 @@ export default function Settings() {
   const { data: ratioTargets, refresh: refreshRatios } = useApi(getRatioTargets)
 
   const [defaultClient, setDefaultClient] = useState('')
+  const [autoStart, setAutoStart] = useState(true)
   const [minSpeed, setMinSpeed] = useState(50)
   const [maxSpeed, setMaxSpeed] = useState(5000)
+  const [fetchInterval, setFetchInterval] = useState(1440)
+  const [maxSlots, setMaxSlots] = useState(5)
   const [logRetention, setLogRetention] = useState(7)
   const [saved, setSaved] = useState(false)
 
@@ -23,8 +26,11 @@ export default function Settings() {
   useEffect(() => {
     if (settings) {
       setDefaultClient(settings.defaultClient)
+      setAutoStart(settings.autoStart)
       setMinSpeed(settings.minUploadSpeedKBs)
       setMaxSpeed(settings.maxUploadSpeedKBs)
+      setFetchInterval(settings.fetchIntervalMinutes || 1440)
+      setMaxSlots(settings.prowlarrMaxSlots || 5)
       setLogRetention(settings.logRetentionDays)
     }
   }, [settings])
@@ -33,8 +39,11 @@ export default function Settings() {
     try {
       await updateSettings({
         defaultClient,
+        autoStart,
         minUploadSpeedKBs: minSpeed,
         maxUploadSpeedKBs: maxSpeed,
+        fetchIntervalMinutes: fetchInterval,
+        prowlarrMaxSlots: maxSlots,
         logRetentionDays: logRetention,
       })
       setSaved(true)
@@ -95,6 +104,16 @@ export default function Settings() {
           </div>
         </div>
 
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={autoStart}
+            onChange={(e) => setAutoStart(e.target.checked)}
+            className="rounded bg-gray-800 border-gray-700"
+          />
+          Auto-start torrents when added
+        </label>
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Min Upload Speed (KB/s)</label>
@@ -118,15 +137,40 @@ export default function Settings() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Log Retention (days)</label>
-          <input
-            type="number"
-            value={logRetention}
-            onChange={(e) => setLogRetention(parseInt(e.target.value) || 7)}
-            min={1}
-            className="w-32 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Prowlarr Fetch Interval (minutes)</label>
+            <input
+              type="number"
+              value={fetchInterval}
+              onChange={(e) => setFetchInterval(parseInt(e.target.value) || 1440)}
+              min={5}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Default Max Active Torrents</label>
+            <input
+              type="number"
+              value={maxSlots}
+              onChange={(e) => setMaxSlots(parseInt(e.target.value) || 5)}
+              min={1}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Log Retention (days)</label>
+            <input
+              type="number"
+              value={logRetention}
+              onChange={(e) => setLogRetention(parseInt(e.target.value) || 7)}
+              min={1}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            />
+          </div>
         </div>
 
         <button

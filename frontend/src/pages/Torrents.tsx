@@ -1,21 +1,29 @@
-import { useState, useRef } from 'react'
-import { usePolling } from '../hooks/useApi'
-import { getTorrents, addTorrent, startTorrent, stopTorrent, deleteTorrent, getClientProfiles } from '../lib/api'
-import { useApi } from '../hooks/useApi'
+import { useMemo, useRef, useState } from 'react'
+import { usePolling, useApi } from '../hooks/useApi'
+import { getTorrents, addTorrent, startTorrent, stopTorrent, deleteTorrent, getSavedProwlarrIndexers } from '../lib/api'
 import TorrentList from '../components/TorrentList'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function Torrents() {
-  const { data: torrents, refresh } = usePolling(getTorrents, 5000)
-  const { data: profiles } = useApi(getClientProfiles)
-  const [selectedProfile, setSelectedProfile] = useState('')
-  const [autoStart, setAutoStart] = useState(true)
+  const { data: torrents, refresh } = usePolling(getTorrents, 1000)
+  const { data: indexers } = useApi(getSavedProwlarrIndexers)
+  const indexerMap = useMemo(() => {
+    const map: Record<number, string> = {}
+    if (indexers) {
+      for (const idx of indexers) {
+        map[idx.id] = idx.name
+      }
+    }
+    return map
+  }, [indexers])
   const fileRef = useRef<HTMLInputElement>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null)
 
   const handleAdd = async () => {
     const file = fileRef.current?.files?.[0]
     if (!file) return
     try {
-      await addTorrent(file, selectedProfile, autoStart)
+      await addTorrent(file)
       if (fileRef.current) fileRef.current.value = ''
       refresh()
     } catch (err) {
@@ -41,17 +49,21 @@ export default function Torrents() {
     }
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Delete this torrent?')) return
+  const handleDeleteRequest = (id: number) => {
+    const torrent = torrents?.find(t => t.id === id)
+    setDeleteTarget({ id, name: torrent?.name || `Torrent #${id}` })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
     try {
-      await deleteTorrent(id)
+      await deleteTorrent(deleteTarget.id)
       refresh()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete')
     }
+    setDeleteTarget(null)
   }
-
-  const profileNames = profiles ? Object.keys(profiles) : []
 
   return (
     <div className="space-y-6">
@@ -69,28 +81,6 @@ export default function Torrents() {
               className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-gray-800 file:text-gray-300 hover:file:bg-gray-700"
             />
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Client Profile</label>
-            <select
-              value={selectedProfile}
-              onChange={(e) => setSelectedProfile(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm"
-            >
-              <option value="">Default</option>
-              {profileNames.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={autoStart}
-              onChange={(e) => setAutoStart(e.target.checked)}
-              className="rounded bg-gray-800 border-gray-700"
-            />
-            Auto-start
-          </label>
           <button
             onClick={handleAdd}
             className="px-4 py-1.5 bg-ghost-600 text-white rounded hover:bg-ghost-700 text-sm font-medium"
@@ -103,11 +93,20 @@ export default function Torrents() {
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <TorrentList
           torrents={torrents || []}
+          indexerMap={indexerMap}
           onStart={handleStart}
           onStop={handleStop}
-          onDelete={handleDelete}
+          onDelete={handleDeleteRequest}
         />
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete Torrent"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

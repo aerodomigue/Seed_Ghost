@@ -1,14 +1,15 @@
 import type { Torrent } from '../lib/types'
-import { formatBytes } from '../lib/utils'
+import { formatBytes, formatSeedTime } from '../lib/utils'
 
 interface TorrentListProps {
   torrents: Torrent[]
+  indexerMap: Record<number, string>
   onStart: (id: number) => void
   onStop: (id: number) => void
   onDelete: (id: number) => void
 }
 
-export default function TorrentList({ torrents, onStart, onStop, onDelete }: TorrentListProps) {
+export default function TorrentList({ torrents, indexerMap, onStart, onStop, onDelete }: TorrentListProps) {
   if (torrents.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -23,13 +24,16 @@ export default function TorrentList({ torrents, onStart, onStop, onDelete }: Tor
         <thead>
           <tr className="border-b border-gray-800 text-gray-400">
             <th className="text-left py-3 px-2">Name</th>
-            <th className="text-left py-3 px-2">Size</th>
-            <th className="text-left py-3 px-2">Uploaded</th>
-            <th className="text-center py-3 px-2">Ratio</th>
-            <th className="text-center py-3 px-2">L/S</th>
-            <th className="text-left py-3 px-2">Client</th>
-            <th className="text-left py-3 px-2">Status</th>
-            <th className="text-right py-3 px-2">Actions</th>
+            <th className="text-left py-3 px-2 w-20">Size</th>
+            <th className="text-left py-3 px-2 w-20">Uploaded</th>
+            <th className="text-left py-3 px-2 w-24">Speed</th>
+            <th className="text-center py-3 px-2 w-16">Ratio</th>
+            <th className="text-center py-3 px-2 w-14">L/S</th>
+            <th className="text-left py-3 px-2 w-24">Source</th>
+            <th className="text-left py-3 px-2 w-28">Client</th>
+            <th className="text-left py-3 px-2 w-20">Seed Time</th>
+            <th className="text-left py-3 px-2 w-20">Status</th>
+            <th className="text-right py-3 px-2 w-24">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -43,24 +47,43 @@ export default function TorrentList({ torrents, onStart, onStop, onDelete }: Tor
                     {new URL(t.trackerUrl).hostname}
                   </div>
                 </td>
-                <td className="py-3 px-2 text-gray-400">{formatBytes(t.totalSize)}</td>
-                <td className="py-3 px-2 text-ghost-400">{formatBytes(t.uploaded)}</td>
-                <td className="py-3 px-2 text-center">
+                <td className="py-3 px-2 text-gray-400 whitespace-nowrap">{formatBytes(t.totalSize)}</td>
+                <td className="py-3 px-2 text-ghost-400 whitespace-nowrap">{formatBytes(t.uploaded)}</td>
+                <td className="py-3 px-2 text-gray-400 whitespace-nowrap">
+                  {t.active && t.uploadSpeed > 0 ? `${formatBytes(t.uploadSpeed)}/s` : '-'}
+                </td>
+                <td className="py-3 px-2 text-center whitespace-nowrap">
                   <span className={`font-mono ${parseFloat(ratio) >= 1 ? 'text-green-400' : 'text-yellow-400'}`}>
                     {ratio}
                   </span>
                 </td>
-                <td className="py-3 px-2 text-center text-gray-400">
+                <td className="py-3 px-2 text-center text-gray-400 whitespace-nowrap">
                   {t.leechers}/{t.seeders}
                 </td>
+                <td className="py-3 px-2 text-xs">
+                  {t.indexerId != null ? (
+                    <span className="text-ghost-400" title={`Indexer #${t.indexerId}`}>
+                      {indexerMap[t.indexerId] || `#${t.indexerId}`}
+                    </span>
+                  ) : (
+                    <span className="text-gray-500">Manual</span>
+                  )}
+                </td>
                 <td className="py-3 px-2 text-gray-400 text-xs">{t.clientProfile || '-'}</td>
+                <td className="py-3 px-2 text-xs">
+                  <span className={t.seedTimeRemainingMs <= 0 ? 'text-green-400' : 'text-orange-400'}>
+                    {formatSeedTime(t.seedTimeRemainingMs)}
+                  </span>
+                </td>
                 <td className="py-3 px-2">
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                    t.active
+                    t.status === 'seeding'
                       ? 'bg-green-900/50 text-green-400'
+                      : t.status === 'pending'
+                      ? 'bg-yellow-900/50 text-yellow-400'
                       : 'bg-gray-800 text-gray-400'
                   }`}>
-                    {t.active ? 'Seeding' : 'Stopped'}
+                    {t.status === 'seeding' ? 'Seeding' : t.status === 'pending' ? 'Pending' : 'Stopped'}
                   </span>
                 </td>
                 <td className="py-3 px-2 text-right">
