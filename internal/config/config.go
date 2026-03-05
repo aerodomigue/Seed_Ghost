@@ -20,6 +20,9 @@ type Config struct {
 	// Default client profile name
 	DefaultClient string `json:"defaultClient"`
 
+	// Auto-start torrents when added
+	AutoStart bool `json:"autoStart"`
+
 	// Upload speed limits (KB/s)
 	MinUploadSpeedKBs float64 `json:"minUploadSpeedKBs"`
 	MaxUploadSpeedKBs float64 `json:"maxUploadSpeedKBs"`
@@ -27,7 +30,8 @@ type Config struct {
 	// Prowlarr
 	ProwlarrURL    string `json:"prowlarrUrl"`
 	ProwlarrAPIKey string `json:"prowlarrApiKey"`
-	FetchInterval  int    `json:"fetchIntervalMinutes"` // minutes between auto-fetch
+	FetchInterval    int `json:"fetchIntervalMinutes"`    // minutes between auto-fetch
+	ProwlarrMaxSlots int `json:"prowlarrMaxSlots"`        // max concurrent active torrents
 
 	// Logging
 	LogRetentionDays int `json:"logRetentionDays"`
@@ -43,9 +47,11 @@ func DefaultConfig() *Config {
 		DatabasePath:      "data/seedghost.db",
 		ProfilesDir:       "profiles",
 		DefaultClient:     "qBittorrent 4.6.2",
+		AutoStart:         true,
 		MinUploadSpeedKBs: 50,
 		MaxUploadSpeedKBs: 5000,
-		FetchInterval:     30,
+		FetchInterval:     1440,
+		ProwlarrMaxSlots:  5,
 		LogRetentionDays:  7,
 		DataDir:           "data",
 	}
