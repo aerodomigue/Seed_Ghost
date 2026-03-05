@@ -16,6 +16,7 @@ import (
 	"github.com/aerodomigue/Seed_Ghost/internal/database"
 	"github.com/aerodomigue/Seed_Ghost/internal/engine"
 	"github.com/aerodomigue/Seed_Ghost/internal/web"
+	webembed "github.com/aerodomigue/Seed_Ghost/web"
 )
 
 func main() {
@@ -118,6 +119,11 @@ func main() {
 }
 
 func getFrontendFS() (fs.FS, error) {
+	// Try embedded frontend first (production binary)
+	if fsys, err := webembed.FrontendFS(); err == nil {
+		return fsys, nil
+	}
+	// Fall back to filesystem (dev mode)
 	if info, err := os.Stat("web/dist"); err == nil && info.IsDir() {
 		return os.DirFS("web/dist"), nil
 	}
