@@ -31,11 +31,13 @@ func testServer(t *testing.T) (*Server, *httptest.Server) {
 	profiles := client.NewProfileStore(profileDir)
 
 	cfg := config.DefaultConfig()
+	cfg.AutoStart = false
+	cfgService := config.NewService(cfg, db)
 	ratioCfg := engine.DefaultRatioConfig()
-	manager := engine.NewManager(db, profiles, ratioCfg)
+	manager := engine.NewManager(db, profiles, ratioCfg, cfg.DefaultClient)
 	t.Cleanup(func() { manager.Shutdown() })
 
-	s := NewServer(db, manager, profiles, cfg, nil)
+	s := NewServer(db, manager, profiles, cfgService, nil)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 
@@ -90,7 +92,6 @@ func TestAddAndListTorrent(t *testing.T) {
 	writer := multipart.NewWriter(&buf)
 	part, _ := writer.CreateFormFile("torrent", "test.torrent")
 	part.Write(torrentData)
-	writer.WriteField("autoStart", "false")
 	writer.Close()
 
 	resp, err := http.Post(ts.URL+"/api/v1/torrents", writer.FormDataContentType(), &buf)
@@ -131,7 +132,6 @@ func TestDeleteTorrent(t *testing.T) {
 	writer := multipart.NewWriter(&buf)
 	part, _ := writer.CreateFormFile("torrent", "test.torrent")
 	part.Write(torrentData)
-	writer.WriteField("autoStart", "false")
 	writer.Close()
 
 	resp, _ := http.Post(ts.URL+"/api/v1/torrents", writer.FormDataContentType(), &buf)

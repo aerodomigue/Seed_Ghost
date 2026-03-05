@@ -13,6 +13,7 @@ import (
 	"github.com/anthony/seed_ghost/internal/config"
 	"github.com/anthony/seed_ghost/internal/database"
 	"github.com/anthony/seed_ghost/internal/engine"
+	"github.com/anthony/seed_ghost/internal/prowlarr"
 )
 
 // Server is the HTTP server for the SeedGhost web UI and API.
@@ -20,17 +21,17 @@ type Server struct {
 	db       *database.DB
 	manager  *engine.Manager
 	profiles *client.ProfileStore
-	config   *config.Config
+	config   *config.Service
 	frontend fs.FS // embedded frontend files
 }
 
 // NewServer creates a new web server.
-func NewServer(db *database.DB, manager *engine.Manager, profiles *client.ProfileStore, cfg *config.Config, frontend fs.FS) *Server {
+func NewServer(db *database.DB, manager *engine.Manager, profiles *client.ProfileStore, cfgService *config.Service, frontend fs.FS) *Server {
 	return &Server{
 		db:       db,
 		manager:  manager,
 		profiles: profiles,
-		config:   cfg,
+		config:   cfgService,
 		frontend: frontend,
 	}
 }
@@ -43,6 +44,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/torrents", s.handleTorrents)
 	mux.HandleFunc("/api/v1/torrents/", s.handleTorrentByID)
 	mux.HandleFunc("/api/v1/stats/overview", s.handleStatsOverview)
+	mux.HandleFunc("/api/v1/stats/history", s.handleStatsHistory)
 	mux.HandleFunc("/api/v1/settings", s.handleSettings)
 	mux.HandleFunc("/api/v1/logs", s.handleLogs)
 	mux.HandleFunc("/api/v1/ratio-targets", s.handleRatioTargets)
@@ -52,29 +54,33 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/prowlarr/indexers", s.handleProwlarrIndexers)
 	mux.HandleFunc("/api/v1/prowlarr/fetch", s.handleProwlarrFetch)
 
-	// Serve frontend
+	// Serve frontend — wrap mux to handle SPA fallback for non-API routes
+	handler := http.Handler(mux)
 	if s.frontend != nil {
 		fileServer := http.FileServer(http.FS(s.frontend))
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// API routes already handled above
+		// Pre-read index.html for SPA fallback (avoids FileServer redirect loops)
+		indexHTML, _ := fs.ReadFile(s.frontend, "index.html")
+
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Let API routes go through the mux
 			if strings.HasPrefix(r.URL.Path, "/api/") {
-				http.NotFound(w, r)
+				mux.ServeHTTP(w, r)
 				return
 			}
-			// Try to serve static file, fall back to index.html for SPA routing
-			path := r.URL.Path
-			if path == "/" {
-				path = "/index.html"
+			// Try to serve static file (JS, CSS, images, etc.)
+			if r.URL.Path != "/" {
+				if _, err := fs.Stat(s.frontend, strings.TrimPrefix(r.URL.Path, "/")); err == nil {
+					fileServer.ServeHTTP(w, r)
+					return
+				}
 			}
-			if _, err := fs.Stat(s.frontend, strings.TrimPrefix(path, "/")); err != nil {
-				// Serve index.html for SPA routes
-				r.URL.Path = "/index.html"
-			}
-			fileServer.ServeHTTP(w, r)
+			// SPA fallback: serve index.html directly
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(indexHTML)
 		})
 	}
 
-	return corsMiddleware(mux)
+	return corsMiddleware(handler)
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -111,18 +117,22 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type torrentResponse struct {
-		ID            int64  `json:"id"`
-		InfoHash      string `json:"infoHash"`
-		Name          string `json:"name"`
-		TotalSize     int64  `json:"totalSize"`
-		TrackerURL    string `json:"trackerUrl"`
-		ClientProfile string `json:"clientProfile"`
-		Active        bool   `json:"active"`
-		AddedAt       string `json:"addedAt"`
-		Source        string `json:"source"`
-		Uploaded      int64  `json:"uploaded"`
-		Leechers      int    `json:"leechers"`
-		Seeders       int    `json:"seeders"`
+		ID                  int64   `json:"id"`
+		InfoHash            string  `json:"infoHash"`
+		Name                string  `json:"name"`
+		TotalSize           int64   `json:"totalSize"`
+		TrackerURL          string  `json:"trackerUrl"`
+		ClientProfile       string  `json:"clientProfile"`
+		Active              bool    `json:"active"`
+		Status              string  `json:"status"` // "stopped", "pending", "seeding"
+		AddedAt             string  `json:"addedAt"`
+		Source              string  `json:"source"`
+		Uploaded            int64   `json:"uploaded"`
+		UploadSpeed         float64 `json:"uploadSpeed"` // bytes/s
+		Leechers            int     `json:"leechers"`
+		Seeders             int     `json:"seeders"`
+		IndexerID           *int64  `json:"indexerId"`
+		SeedTimeRemainingMs *int64  `json:"seedTimeRemainingMs"`
 	}
 
 	var result []torrentResponse
@@ -130,21 +140,31 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 
 	for _, row := range rows {
 		tr := torrentResponse{
-			ID:            row.ID,
-			InfoHash:      row.InfoHash,
-			Name:          row.Name,
-			TotalSize:     row.TotalSize,
-			TrackerURL:    row.TrackerURL,
-			ClientProfile: row.ClientProfile,
-			Active:        row.Active,
-			AddedAt:       row.AddedAt.Format("2006-01-02T15:04:05Z"),
-			Source:        row.Source,
+			ID:                  row.ID,
+			InfoHash:            row.InfoHash,
+			Name:                row.Name,
+			TotalSize:           row.TotalSize,
+			TrackerURL:          row.TrackerURL,
+			ClientProfile:       row.ClientProfile,
+			Active:              row.Active,
+			Status:              "stopped",
+			AddedAt:             row.AddedAt.Format("2006-01-02T15:04:05Z"),
+			Source:              row.Source,
+			IndexerID:           row.IndexerID,
+			SeedTimeRemainingMs: row.SeedTimeRemainingMs,
 		}
 		if session, ok := sessions[row.ID]; ok {
 			state := session.GetState()
 			tr.Uploaded = state.Uploaded
 			tr.Leechers = state.LastLeechers
 			tr.Seeders = state.LastSeeders
+			tr.UploadSpeed = session.GetSpeed()
+			tr.SeedTimeRemainingMs = session.GetSeedTimeRemainingMs()
+			if session.HasAnnounced() {
+				tr.Status = "seeding"
+			} else {
+				tr.Status = "pending"
+			}
 		} else if state, err := s.db.GetAnnounceState(row.ID); err == nil {
 			tr.Uploaded = state.Uploaded
 			tr.Leechers = state.LastLeechers
@@ -179,13 +199,8 @@ func (s *Server) addTorrent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profileName := r.FormValue("clientProfile")
-	if profileName == "" {
-		profileName = s.config.DefaultClient
-	}
-	autoStart := r.FormValue("autoStart") == "true"
-
-	id, err := s.manager.AddTorrent(data, profileName, autoStart)
+	cfg := s.config.Get()
+	id, err := s.manager.AddTorrent(data, cfg.DefaultClient, cfg.AutoStart, nil, nil)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -287,34 +302,64 @@ func (s *Server) handleStatsOverview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleStatsHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	hours := 24
+	if h := r.URL.Query().Get("hours"); h != "" {
+		if v, err := strconv.Atoi(h); err == nil && v > 0 {
+			hours = v
+		}
+	}
+
+	points, err := s.db.GetStatsHistory(hours)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if points == nil {
+		points = []database.StatsHistoryPoint{}
+	}
+	jsonResponse(w, points)
+}
+
 // --- Settings ---
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		jsonResponse(w, s.config)
+		jsonResponse(w, s.config.Get())
 	case "PUT":
-		var newCfg config.Config
-		if err := json.NewDecoder(r.Body).Decode(&newCfg); err != nil {
+		var incoming config.Config
+		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 			jsonError(w, "invalid JSON", http.StatusBadRequest)
 			return
 		}
-		// Apply relevant settings
-		s.config.DefaultClient = newCfg.DefaultClient
-		s.config.MinUploadSpeedKBs = newCfg.MinUploadSpeedKBs
-		s.config.MaxUploadSpeedKBs = newCfg.MaxUploadSpeedKBs
-		s.config.LogRetentionDays = newCfg.LogRetentionDays
-		s.config.ProwlarrURL = newCfg.ProwlarrURL
-		s.config.ProwlarrAPIKey = newCfg.ProwlarrAPIKey
-		s.config.FetchInterval = newCfg.FetchInterval
-
-		// Update ratio config in manager
-		s.manager.UpdateConfig(engine.RatioConfig{
-			MinSpeedKBs: s.config.MinUploadSpeedKBs,
-			MaxSpeedKBs: s.config.MaxUploadSpeedKBs,
+		s.config.Update(func(cfg *config.Config) {
+			cfg.DefaultClient = incoming.DefaultClient
+			cfg.AutoStart = incoming.AutoStart
+			cfg.MinUploadSpeedKBs = incoming.MinUploadSpeedKBs
+			cfg.MaxUploadSpeedKBs = incoming.MaxUploadSpeedKBs
+			cfg.LogRetentionDays = incoming.LogRetentionDays
+			if incoming.FetchInterval > 0 {
+				cfg.FetchInterval = incoming.FetchInterval
+			}
+			if incoming.ProwlarrMaxSlots > 0 {
+				cfg.ProwlarrMaxSlots = incoming.ProwlarrMaxSlots
+			}
 		})
 
-		jsonResponse(w, s.config)
+		// Update ratio config in running sessions
+		cfg := s.config.Get()
+		s.manager.UpdateConfig(engine.RatioConfig{
+			MinSpeedKBs: cfg.MinUploadSpeedKBs,
+			MaxSpeedKBs: cfg.MaxUploadSpeedKBs,
+		})
+
+		jsonResponse(w, cfg)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -407,10 +452,11 @@ func (s *Server) handleRefreshProfiles(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProwlarrConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
+		cfg := s.config.Get()
 		jsonResponse(w, map[string]interface{}{
-			"url":                  s.config.ProwlarrURL,
-			"apiKey":               s.config.ProwlarrAPIKey,
-			"fetchIntervalMinutes": s.config.FetchInterval,
+			"url":                  cfg.ProwlarrURL,
+			"apiKey":               cfg.ProwlarrAPIKey,
+			"fetchIntervalMinutes": cfg.FetchInterval,
 		})
 	case "PUT":
 		var body struct {
@@ -422,23 +468,112 @@ func (s *Server) handleProwlarrConfig(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "invalid JSON", http.StatusBadRequest)
 			return
 		}
-		s.config.ProwlarrURL = body.URL
-		s.config.ProwlarrAPIKey = body.APIKey
-		if body.FetchInterval > 0 {
-			s.config.FetchInterval = body.FetchInterval
+		// Test connection before saving
+		if body.URL != "" && body.APIKey != "" {
+			pc := prowlarr.NewClient(body.URL, body.APIKey)
+			if err := pc.TestConnection(); err != nil {
+				jsonError(w, err.Error(), http.StatusBadGateway)
+				return
+			}
 		}
+
+		s.config.Update(func(cfg *config.Config) {
+			cfg.ProwlarrURL = body.URL
+			cfg.ProwlarrAPIKey = body.APIKey
+			if body.FetchInterval > 0 {
+				cfg.FetchInterval = body.FetchInterval
+			}
+		})
+
 		jsonResponse(w, map[string]string{"status": "updated"})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
+type indexerWithSelection struct {
+	ID                   int      `json:"id"`
+	Name                 string   `json:"name"`
+	Protocol             string   `json:"protocol"`
+	Enable               bool     `json:"enable"`
+	ImplementationName   string   `json:"implementationName"`
+	Selected             bool     `json:"selected"`
+	MaxUploadSpeedKBs    *float64 `json:"maxUploadSpeedKbs"`
+	FetchIntervalMinutes *int     `json:"fetchIntervalMinutes"`
+	MaxSlots             *int     `json:"maxSlots"`
+	SeedTimeHours        *int     `json:"seedTimeHours"`
+}
+
 func (s *Server) handleProwlarrIndexers(w http.ResponseWriter, r *http.Request) {
-	// Placeholder — implemented in Phase 4
 	switch r.Method {
 	case "GET":
-		jsonResponse(w, []interface{}{})
+		saved, err := s.db.GetProwlarrIndexers()
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		jsonResponse(w, saved)
+	case "POST":
+		cfg := s.config.Get()
+		if cfg.ProwlarrURL == "" || cfg.ProwlarrAPIKey == "" {
+			jsonError(w, "Prowlarr URL and API key must be configured first", http.StatusBadRequest)
+			return
+		}
+		pc := prowlarr.NewClient(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
+		indexers, err := pc.GetIndexers()
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		saved, _ := s.db.GetProwlarrIndexers()
+		savedMap := make(map[int64]database.ProwlarrIndexerRow)
+		for _, row := range saved {
+			savedMap[row.ID] = row
+		}
+
+		var result []indexerWithSelection
+		for _, idx := range indexers {
+			item := indexerWithSelection{
+				ID:                 idx.ID,
+				Name:               idx.Name,
+				Protocol:           idx.Protocol,
+				Enable:             idx.Enable,
+				ImplementationName: idx.ImplementationName,
+			}
+			if sel, ok := savedMap[int64(idx.ID)]; ok {
+				item.Selected = sel.Enabled
+				item.MaxUploadSpeedKBs = sel.MaxUploadSpeedKBs
+				item.FetchIntervalMinutes = sel.FetchIntervalMinutes
+				item.MaxSlots = sel.MaxSlots
+				item.SeedTimeHours = sel.SeedTimeHours
+			}
+			result = append(result, item)
+		}
+		if result == nil {
+			result = []indexerWithSelection{}
+		}
+		jsonResponse(w, result)
 	case "PUT":
+		var selections []struct {
+			ID                   int64    `json:"id"`
+			Name                 string   `json:"name"`
+			Selected             bool     `json:"selected"`
+			MaxUploadSpeedKBs    *float64 `json:"maxUploadSpeedKbs"`
+			FetchIntervalMinutes *int     `json:"fetchIntervalMinutes"`
+			MaxSlots             *int     `json:"maxSlots"`
+			SeedTimeHours        *int     `json:"seedTimeHours"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&selections); err != nil {
+			jsonError(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		for _, sel := range selections {
+			if err := s.db.UpsertProwlarrIndexer(sel.ID, sel.Name, sel.Selected, sel.MaxUploadSpeedKBs, sel.FetchIntervalMinutes, sel.MaxSlots, sel.SeedTimeHours); err != nil {
+				jsonError(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
 		jsonResponse(w, map[string]string{"status": "updated"})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -450,8 +585,23 @@ func (s *Server) handleProwlarrFetch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// Placeholder — implemented in Phase 4
-	jsonResponse(w, map[string]string{"status": "fetch triggered"})
+
+	cfg := s.config.Get()
+	if cfg.ProwlarrURL == "" || cfg.ProwlarrAPIKey == "" {
+		jsonError(w, "Prowlarr URL and API key must be configured first", http.StatusBadRequest)
+		return
+	}
+
+	prowlarrClient := prowlarr.NewClient(cfg.ProwlarrURL, cfg.ProwlarrAPIKey)
+	if _, err := prowlarrClient.GetIndexers(); err != nil {
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	fetcher := prowlarr.NewFetcher(prowlarrClient, s.db, s.manager, cfg.FetchInterval, cfg.DefaultClient, cfg.ProwlarrMaxSlots)
+	go fetcher.FetchNow()
+
+	jsonResponse(w, map[string]string{"status": "fetch started"})
 }
 
 // --- Helpers ---
