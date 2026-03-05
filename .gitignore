@@ -1,4 +1,4 @@
-seedghost
+/seedghost
 *.exe
 *.db
 coverage.out
