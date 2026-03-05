@@ -50,7 +50,7 @@ func TestSearch(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key")
-	torrents, err := client.Search([]int{1}, "test")
+	torrents, err := client.Search([]int{1}, "test", nil)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestSearchSortsByLeechers(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key")
-	torrents, err := client.Search(nil, "")
+	torrents, err := client.Search(nil, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
