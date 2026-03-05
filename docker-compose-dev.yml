@@ -1,6 +1,6 @@
 services:
   seedghost:
-    image: ghcr.io/aerodomigue/seed_ghost:latest
+    build: .
     container_name: seedghost
     ports:
       - "8333:8333"
