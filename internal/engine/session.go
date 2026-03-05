@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	mrand "math/rand"
 	"net"
 	"sync"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/anthony/seed_ghost/internal/torrent"
 )
 
+const blockSize64 = int64(blockSize) // 16KB
+
 // Session manages the announce loop for a single torrent.
 type Session struct {
 	mu sync.Mutex
@@ -21,7 +24,6 @@ type Session struct {
 	TorrentID int64
 	Torrent   *torrent.Torrent
 	Profile   *client.Profile
-	Config    RatioConfig
 
 	// State
 	PeerID   string
@@ -30,25 +32,35 @@ type Session struct {
 	Uploaded int64
 
 	// Tracking
-	lastDelta    int64
-	lastInterval int
-	lastLeechers int
-	lastSeeders  int
+	lastInterval   int
+	minInterval    int
+	lastLeechers   int
+	lastSeeders    int
+	allocatedSpeed float64 // speed assigned by bandwidth dispatcher (bytes/s)
+	currentSpeed   float64 // actual speed with jitter (bytes/s)
+	accumulator    float64 // fractional bytes not yet added to Uploaded
+
+	// Seed time countdown (nil = manual torrent, skip decrement)
+	seedTimeRemainingMs *int64
+
+	// For announce logging
+	uploadedAtLastAnnounce int64
+	announced              bool // true after first successful announce
 
 	// TCP listener for connectable check
 	listener net.Listener
 
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 	db     *database.DB
 }
 
 // NewSession creates a new session for a torrent.
-func NewSession(torrentID int64, tor *torrent.Torrent, profile *client.Profile, cfg RatioConfig, db *database.DB) *Session {
+func NewSession(torrentID int64, tor *torrent.Torrent, profile *client.Profile, db *database.DB) *Session {
 	return &Session{
 		TorrentID:    torrentID,
 		Torrent:      tor,
 		Profile:      profile,
-		Config:       cfg,
 		lastInterval: 1800, // Default 30 min
 		db:           db,
 	}
@@ -62,13 +74,14 @@ func (s *Session) RestoreState(state *database.AnnounceStateRow) {
 	s.Key = state.Key
 	s.Port = state.Port
 	s.Uploaded = state.Uploaded
-	s.lastDelta = state.LastDelta
+	s.uploadedAtLastAnnounce = state.Uploaded
 	s.lastInterval = state.LastInterval
 	s.lastLeechers = state.LastLeechers
 	s.lastSeeders = state.LastSeeders
+	s.announced = true
 }
 
-// Start begins the announce loop in a goroutine.
+// Start begins the announce loop and upload simulation in goroutines.
 func (s *Session) Start(ctx context.Context) {
 	ctx, s.cancel = context.WithCancel(ctx)
 
@@ -79,19 +92,23 @@ func (s *Session) Start(ctx context.Context) {
 		s.Key = s.Profile.GenerateKey()
 		s.Port = s.Profile.RandomPort()
 	}
+	s.uploadedAtLastAnnounce = s.Uploaded
 	s.mu.Unlock()
 
 	// Start TCP listener for connectable checks
 	s.startListener()
 
+	s.wg.Add(2)
+	go s.simulateUpload(ctx)
 	go s.announceLoop(ctx)
 }
 
-// Stop cancels the announce loop and sends a stopped event.
+// Stop cancels the announce loop, waits for cleanup, and closes the listener.
 func (s *Session) Stop() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	s.wg.Wait()
 	if s.listener != nil {
 		s.listener.Close()
 	}
@@ -112,7 +129,98 @@ func (s *Session) GetState() *database.AnnounceStateRow {
 		LastInterval: s.lastInterval,
 		LastLeechers: s.lastLeechers,
 		LastSeeders:  s.lastSeeders,
-		LastDelta:    s.lastDelta,
+		LastDelta:    0,
+	}
+}
+
+// GetSpeed returns the current simulated upload speed in bytes/s.
+func (s *Session) GetSpeed() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentSpeed
+}
+
+// HasAnnounced returns true if at least one successful announce has been made.
+func (s *Session) HasAnnounced() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.announced
+}
+
+// SetAllocatedSpeed sets the speed assigned by the bandwidth dispatcher.
+func (s *Session) SetAllocatedSpeed(bytesPerSec float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.allocatedSpeed = bytesPerSec
+}
+
+// GetLeechers returns the current leecher count for this session.
+func (s *Session) GetLeechers() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastLeechers
+}
+
+// SetSeedTimeRemaining sets the seed time countdown (nil = manual torrent).
+func (s *Session) SetSeedTimeRemaining(ms *int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seedTimeRemainingMs = ms
+}
+
+// GetSeedTimeRemainingMs returns the current seed time remaining in ms (nil = manual).
+func (s *Session) GetSeedTimeRemainingMs() *int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seedTimeRemainingMs == nil {
+		return nil
+	}
+	v := *s.seedTimeRemainingMs
+	return &v
+}
+
+// GetSeeders returns the current seeder count for this session.
+func (s *Session) GetSeeders() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastSeeders
+}
+
+// simulateUpload increments Uploaded every second based on the allocated speed.
+func (s *Session) simulateUpload(ctx context.Context) {
+	defer s.wg.Done()
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.mu.Lock()
+			// Decrement seed time countdown
+			if s.seedTimeRemainingMs != nil {
+				*s.seedTimeRemainingMs -= 1000
+			}
+			if s.allocatedSpeed > 0 {
+				// ±5% jitter per tick
+				jitter := 1.0 + (mrand.Float64()*0.1 - 0.05)
+				speed := s.allocatedSpeed * jitter
+				s.currentSpeed = speed
+
+				// Accumulate bytes and flush whole blocks
+				s.accumulator += speed
+				blocks := int64(s.accumulator) / blockSize64
+				if blocks > 0 {
+					s.Uploaded += blocks * blockSize64
+					s.accumulator -= float64(blocks * blockSize64)
+				}
+			} else {
+				s.currentSpeed = 0
+				s.accumulator = 0
+			}
+			s.mu.Unlock()
+		}
 	}
 }
 
@@ -166,7 +274,9 @@ func handleBTHandshake(conn net.Conn, infoHash [20]byte) {
 }
 
 func (s *Session) announceLoop(ctx context.Context) {
-	// Send started event on first announce
+	defer s.wg.Done()
+	// Always send "started" on first announce — even restored sessions need to
+	// re-register with the tracker (shutdown sends "stopped" which removes the peer).
 	s.doAnnounce("started")
 	s.saveState()
 
@@ -175,16 +285,20 @@ func (s *Session) announceLoop(ctx context.Context) {
 		interval := s.lastInterval
 		s.mu.Unlock()
 
-		// Apply jitter to interval
+		// Apply jitter to interval, respect min_interval
 		waitSecs := ApplyJitter(interval)
+		if s.minInterval > 0 && waitSecs < s.minInterval {
+			waitSecs = s.minInterval
+		}
 		timer := time.NewTimer(time.Duration(waitSecs) * time.Second)
 
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			// Save state BEFORE stopped announce (preserves leechers/seeders)
+			s.saveState()
 			// Send stopped event
 			s.doAnnounce("stopped")
-			s.saveState()
 			return
 		case <-timer.C:
 			s.doAnnounce("")
@@ -199,67 +313,102 @@ func (s *Session) doAnnounce(event string) {
 	}
 
 	s.mu.Lock()
-	trackerURL := s.Torrent.Trackers[0] // Use primary tracker
-	leechers := s.lastLeechers
+	// Delta is what accumulated since last announce (from simulateUpload)
+	delta := s.Uploaded - s.uploadedAtLastAnnounce
+	s.uploadedAtLastAnnounce = s.Uploaded
 
-	// Calculate upload delta
-	var delta int64
-	if event != "started" && event != "stopped" {
-		delta = CalculateUploadDelta(s.Config, leechers, s.lastInterval, s.lastDelta)
-		s.Uploaded += delta
-	}
-
-	params := &announce.Params{
-		TrackerURL: trackerURL,
+	baseParams := announce.Params{
 		InfoHash:   s.Torrent.InfoHash,
 		PeerID:     s.PeerID,
 		Port:       s.Port,
 		Uploaded:   s.Uploaded,
-		Downloaded: 0,
-		Left:       0, // Always seeding (left=0)
+		Downloaded: s.Torrent.TotalSize, // Already downloaded everything (seeding)
+		Left:       0,                   // Always seeding (left=0)
 		Event:      event,
 		Key:        s.Key,
 		Compact:    s.Profile.SupportsCompact,
 		Numwant:    s.Profile.NumwantDefault,
 	}
+	trackers := s.Torrent.Trackers
+	profile := s.Profile
 	s.mu.Unlock()
 
-	resp, err := announce.Do(params, s.Profile)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	status := "success"
-	errMsg := ""
-
-	if err != nil {
-		log.Printf("[session %d] announce error: %v", s.TorrentID, err)
-		status = "error"
-		errMsg = err.Error()
-	} else if resp.FailureMsg != "" {
-		log.Printf("[session %d] tracker failure: %s", s.TorrentID, resp.FailureMsg)
-		status = "error"
-		errMsg = resp.FailureMsg
-	} else {
-		if resp.Interval > 0 {
-			s.lastInterval = resp.Interval
-		}
-		s.lastLeechers = resp.Leechers
-		s.lastSeeders = resp.Seeders
-		s.lastDelta = delta
-
-		log.Printf("[session %d] announce ok: leechers=%d seeders=%d interval=%d uploaded=%d delta=%d",
-			s.TorrentID, resp.Leechers, resp.Seeders, resp.Interval, s.Uploaded, delta)
+	type trackerResult struct {
+		trackerURL string
+		resp       *announce.Response
+		err        error
 	}
 
-	// Log to database
-	if s.db != nil {
-		s.db.InsertAnnounceLog(s.TorrentID, trackerURL, event, delta,
-			s.lastLeechers, s.lastSeeders, s.lastInterval, status, errMsg)
+	// Announce to all trackers in parallel
+	results := make(chan trackerResult, len(trackers))
+	var announceWg sync.WaitGroup
+	for _, trackerURL := range trackers {
+		announceWg.Add(1)
+		go func(url string) {
+			defer announceWg.Done()
+			params := baseParams
+			params.TrackerURL = url
+			resp, err := announce.Do(&params, profile)
+			results <- trackerResult{trackerURL: url, resp: resp, err: err}
+		}(trackerURL)
+	}
 
-		if status == "success" {
-			s.db.InsertStatsLog(s.TorrentID, s.Uploaded, s.lastLeechers, s.lastSeeders)
+	// Close results channel when all goroutines finish
+	go func() {
+		announceWg.Wait()
+		close(results)
+	}()
+
+	// Process results — use best successful response for leechers/seeders
+	bestLeechers := -1
+	for res := range results {
+		s.mu.Lock()
+		status := "success"
+		errMsg := ""
+
+		if res.err != nil {
+			log.Printf("[session %d] announce error (%s): %v", s.TorrentID, res.trackerURL, res.err)
+			status = "error"
+			errMsg = res.err.Error()
+		} else if res.resp.FailureMsg != "" {
+			log.Printf("[session %d] tracker failure (%s): %s", s.TorrentID, res.trackerURL, res.resp.FailureMsg)
+			status = "error"
+			errMsg = res.resp.FailureMsg
+		} else {
+			if res.resp.Interval > 0 {
+				s.lastInterval = res.resp.Interval
+			}
+			if res.resp.MinInterval > 0 {
+				s.minInterval = res.resp.MinInterval
+			}
+			// Keep the highest leecher count across all trackers
+			if res.resp.HasLeechers && res.resp.Leechers > bestLeechers {
+				if event != "started" || res.resp.Leechers > 0 {
+					s.lastLeechers = res.resp.Leechers
+					bestLeechers = res.resp.Leechers
+				}
+			}
+			if event != "started" || res.resp.Seeders > 0 {
+				if res.resp.HasSeeders {
+					s.lastSeeders = res.resp.Seeders
+				}
+			}
+
+			s.announced = true
+			log.Printf("[session %d] announce ok (%s): leechers=%d seeders=%d interval=%d uploaded=%d delta=%d speed=%.0f B/s",
+				s.TorrentID, res.trackerURL, s.lastLeechers, s.lastSeeders, res.resp.Interval, s.Uploaded, delta, s.currentSpeed)
 		}
+
+		// Log to database
+		if s.db != nil {
+			s.db.InsertAnnounceLog(s.TorrentID, res.trackerURL, event, delta,
+				s.lastLeechers, s.lastSeeders, s.lastInterval, status, errMsg)
+
+			if status == "success" {
+				s.db.InsertStatsLog(s.TorrentID, s.Uploaded, s.lastLeechers, s.lastSeeders)
+			}
+		}
+		s.mu.Unlock()
 	}
 }
 
@@ -270,5 +419,14 @@ func (s *Session) saveState() {
 	state := s.GetState()
 	if err := s.db.UpsertAnnounceState(state); err != nil {
 		log.Printf("[session %d] save state error: %v", s.TorrentID, err)
+	}
+	// Persist seed time countdown
+	s.mu.Lock()
+	remaining := s.seedTimeRemainingMs
+	s.mu.Unlock()
+	if remaining != nil {
+		if err := s.db.UpdateSeedTimeRemaining(s.TorrentID, *remaining); err != nil {
+			log.Printf("[session %d] save seed time error: %v", s.TorrentID, err)
+		}
 	}
 }

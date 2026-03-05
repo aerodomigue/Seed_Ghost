@@ -5,34 +5,57 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/anthony/seed_ghost/internal/client"
 	"github.com/anthony/seed_ghost/internal/database"
 	"github.com/anthony/seed_ghost/internal/torrent"
 )
 
-// Manager manages all active seeding sessions.
+// SeedTimeRemainingMs returns the live seed time remaining for a torrent (from session or DB).
+func (m *Manager) SeedTimeRemainingMs(id int64) *int64 {
+	m.mu.Lock()
+	session, ok := m.sessions[id]
+	m.mu.Unlock()
+	if ok {
+		return session.GetSeedTimeRemainingMs()
+	}
+	row, err := m.db.GetTorrent(id)
+	if err != nil {
+		return nil
+	}
+	return row.SeedTimeRemainingMs
+}
+
+// Manager manages all active seeding sessions and dispatches bandwidth.
 type Manager struct {
-	mu       sync.Mutex
-	sessions map[int64]*Session
-	db       *database.DB
-	profiles *client.ProfileStore
-	config   RatioConfig
-	ctx      context.Context
-	cancel   context.CancelFunc
+	mu             sync.Mutex
+	sessions       map[int64]*Session
+	db             *database.DB
+	profiles       *client.ProfileStore
+	defaultProfile string
+	config         RatioConfig
+	globalSpeed    float64 // current global speed in bytes/s
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
 // NewManager creates a new session manager.
-func NewManager(db *database.DB, profiles *client.ProfileStore, cfg RatioConfig) *Manager {
+func NewManager(db *database.DB, profiles *client.ProfileStore, cfg RatioConfig, defaultProfile string) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Manager{
-		sessions: make(map[int64]*Session),
-		db:       db,
-		profiles: profiles,
-		config:   cfg,
-		ctx:      ctx,
-		cancel:   cancel,
+	m := &Manager{
+		sessions:       make(map[int64]*Session),
+		db:             db,
+		profiles:       profiles,
+		defaultProfile: defaultProfile,
+		config:         cfg,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
+	// Pick initial global speed and start dispatcher
+	m.refreshGlobalSpeed()
+	go m.bandwidthDispatcher(ctx)
+	return m
 }
 
 // RestoreActiveSessions loads all active torrents from the database and starts their sessions.
@@ -47,6 +70,9 @@ func (m *Manager) RestoreActiveSessions() error {
 			log.Printf("[manager] failed to restore session for torrent %d: %v", row.ID, err)
 		}
 	}
+
+	// Redistribute bandwidth with restored sessions
+	m.distributeBandwidth()
 
 	log.Printf("[manager] restored %d active sessions", len(m.sessions))
 	return nil
@@ -70,7 +96,13 @@ func (m *Manager) StartTorrent(id int64) error {
 		return fmt.Errorf("set active: %w", err)
 	}
 
-	return m.startSessionFromRow(row)
+	if err := m.startSessionFromRow(row); err != nil {
+		return err
+	}
+
+	// Redistribute bandwidth with new session
+	m.distributeBandwidth()
+	return nil
 }
 
 // StopTorrent stops seeding a torrent by ID.
@@ -90,11 +122,14 @@ func (m *Manager) StopTorrent(id int64) error {
 		return fmt.Errorf("set inactive: %w", err)
 	}
 
+	// Redistribute bandwidth among remaining sessions
+	m.distributeBandwidth()
 	return nil
 }
 
 // AddTorrent adds a new torrent from raw .torrent data and optionally starts it.
-func (m *Manager) AddTorrent(torrentData []byte, profileName string, autoStart bool) (int64, error) {
+// indexerID is non-nil when added via Prowlarr, nil for manual adds.
+func (m *Manager) AddTorrent(torrentData []byte, profileName string, autoStart bool, indexerID *int64, seedTimeMs *int64) (int64, error) {
 	tor, err := torrent.Parse(torrentData)
 	if err != nil {
 		return 0, fmt.Errorf("parse torrent: %w", err)
@@ -105,6 +140,11 @@ func (m *Manager) AddTorrent(torrentData []byte, profileName string, autoStart b
 		trackerURL = tor.Trackers[0]
 	}
 
+	source := "manual"
+	if indexerID != nil {
+		source = "prowlarr"
+	}
+
 	row := &database.TorrentRow{
 		InfoHash:      tor.InfoHashHex(),
 		Name:          tor.Name,
@@ -113,7 +153,19 @@ func (m *Manager) AddTorrent(torrentData []byte, profileName string, autoStart b
 		TorrentData:   torrentData,
 		ClientProfile: profileName,
 		Active:        autoStart,
-		Source:        "manual",
+		Source:        source,
+		IndexerID:     indexerID,
+	}
+	if indexerID != nil {
+		if seedTimeMs != nil {
+			row.SeedTimeRemainingMs = seedTimeMs
+		} else {
+			seedTime := int64(259200000) // 72h in ms default
+			row.SeedTimeRemainingMs = &seedTime
+		}
+	} else {
+		seedTime := int64(0)
+		row.SeedTimeRemainingMs = &seedTime
 	}
 
 	id, err := m.db.InsertTorrent(row)
@@ -126,6 +178,7 @@ func (m *Manager) AddTorrent(torrentData []byte, profileName string, autoStart b
 		if err := m.startSessionFromRow(row); err != nil {
 			return id, fmt.Errorf("start session: %w", err)
 		}
+		m.distributeBandwidth()
 	}
 
 	return id, nil
@@ -140,6 +193,7 @@ func (m *Manager) RemoveTorrent(id int64) error {
 	}
 	m.mu.Unlock()
 
+	m.distributeBandwidth()
 	return m.db.DeleteTorrent(id)
 }
 
@@ -154,26 +208,98 @@ func (m *Manager) GetSessions() map[int64]*Session {
 	return result
 }
 
-// UpdateConfig updates the ratio config for all sessions.
+// UpdateConfig updates the ratio config and redistributes bandwidth.
 func (m *Manager) UpdateConfig(cfg RatioConfig) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.config = cfg
+	m.mu.Unlock()
+	m.refreshGlobalSpeed()
+	m.distributeBandwidth()
+}
+
+// Shutdown stops all sessions gracefully, waiting for each to save state.
+func (m *Manager) Shutdown() {
+	m.mu.Lock()
+	sessions := make(map[int64]*Session, len(m.sessions))
+	for id, s := range m.sessions {
+		sessions[id] = s
+	}
+	m.mu.Unlock()
+
+	for id, session := range sessions {
+		session.Stop()
+		log.Printf("[manager] session %d stopped and state saved", id)
+	}
+
+	m.mu.Lock()
+	m.sessions = make(map[int64]*Session)
+	m.mu.Unlock()
+	m.cancel()
+}
+
+// refreshGlobalSpeed picks a new random global speed.
+func (m *Manager) refreshGlobalSpeed() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.globalSpeed = RandomGlobalSpeed(m.config)
+	log.Printf("[bandwidth] new global speed: %.0f KB/s", m.globalSpeed/1024)
+}
+
+// distributeBandwidth distributes the global speed across sessions by weight.
+func (m *Manager) distributeBandwidth() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(m.sessions) == 0 {
+		return
+	}
+
+	// Calculate weights for each session
+	type sessionWeight struct {
+		session *Session
+		weight  float64
+	}
+
+	var entries []sessionWeight
+	var totalWeight float64
+
 	for _, s := range m.sessions {
-		s.mu.Lock()
-		s.Config = cfg
-		s.mu.Unlock()
+		leechers := s.GetLeechers()
+		seeders := s.GetSeeders()
+		w := CalculateWeight(leechers, seeders)
+		entries = append(entries, sessionWeight{session: s, weight: w})
+		totalWeight += w
+	}
+
+	// Distribute speed proportionally to weight
+	for _, e := range entries {
+		var speed float64
+		if totalWeight > 0 && e.weight > 0 {
+			speed = m.globalSpeed * (e.weight / totalWeight)
+		}
+		e.session.SetAllocatedSpeed(speed)
 	}
 }
 
-// Shutdown stops all sessions gracefully.
-func (m *Manager) Shutdown() {
-	m.cancel()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for id, session := range m.sessions {
-		session.Stop()
-		delete(m.sessions, id)
+// bandwidthDispatcher refreshes global speed every 20 minutes and redistributes.
+func (m *Manager) bandwidthDispatcher(ctx context.Context) {
+	ticker := time.NewTicker(20 * time.Minute)
+	defer ticker.Stop()
+
+	// Also redistribute every 30 seconds to react to leecher count changes
+	redistTicker := time.NewTicker(30 * time.Second)
+	defer redistTicker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.refreshGlobalSpeed()
+			m.distributeBandwidth()
+		case <-redistTicker.C:
+			m.distributeBandwidth()
+		}
 	}
 }
 
@@ -185,26 +311,15 @@ func (m *Manager) startSessionFromRow(row *database.TorrentRow) error {
 
 	profileName := row.ClientProfile
 	if profileName == "" {
-		names := m.profiles.List()
-		if len(names) > 0 {
-			profileName = names[0]
-		}
+		profileName = m.defaultProfile
 	}
-
 	profile, ok := m.profiles.Get(profileName)
 	if !ok {
-		// Fallback: use first available profile
-		all := m.profiles.All()
-		for _, p := range all {
-			profile = p
-			break
-		}
-		if profile == nil {
-			return fmt.Errorf("no client profiles available")
-		}
+		return fmt.Errorf("client profile %q not found", profileName)
 	}
 
-	session := NewSession(row.ID, tor, profile, m.config, m.db)
+	session := NewSession(row.ID, tor, profile, m.db)
+	session.SetSeedTimeRemaining(row.SeedTimeRemainingMs)
 
 	// Try to restore state from database
 	state, err := m.db.GetAnnounceState(row.ID)

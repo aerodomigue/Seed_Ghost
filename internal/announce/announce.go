@@ -21,6 +21,9 @@ type Response struct {
 	Peers       int
 	FailureMsg  string
 	WarningMsg  string
+
+	HasLeechers bool // true if "incomplete" was present in response
+	HasSeeders  bool // true if "complete" was present in response
 }
 
 // Params holds the parameters for an announce request.
@@ -112,9 +115,11 @@ func ParseResponse(data []byte) (*Response, error) {
 	}
 	if v, ok := dict["complete"].(int64); ok {
 		resp.Seeders = int(v)
+		resp.HasSeeders = true
 	}
 	if v, ok := dict["incomplete"].(int64); ok {
 		resp.Leechers = int(v)
+		resp.HasLeechers = true
 	}
 
 	// Count peers
@@ -129,13 +134,25 @@ func ParseResponse(data []byte) (*Response, error) {
 }
 
 func buildQueryParams(params *Params, profile *client.Profile) map[string]string {
+	hexFmt := "%02x" // lowercase by default
+	if profile.UrlEncodingHexCase == "upper" || profile.UrlEncodingHexCase == "" {
+		hexFmt = "%02X" // uppercase (default, most clients)
+	}
+
 	qp := map[string]string{
-		"info_hash":  urlEncodeInfoHash(params.InfoHash),
-		"peer_id":    urlEncodePeerID(params.PeerID),
+		"info_hash":  urlEncodeBytes(params.InfoHash[:], hexFmt),
 		"port":       strconv.Itoa(params.Port),
 		"uploaded":   strconv.FormatInt(params.Uploaded, 10),
 		"downloaded": strconv.FormatInt(params.Downloaded, 10),
 		"left":       strconv.FormatInt(params.Left, 10),
+	}
+
+	// peer_id: some clients don't URL-encode it, but if it contains
+	// non-URL-safe bytes we must encode regardless (safety net)
+	if profile.ShouldUrlEncodePeerID() || containsNonURLSafe(params.PeerID) {
+		qp["peer_id"] = urlEncodeBytes([]byte(params.PeerID), hexFmt)
+	} else {
+		qp["peer_id"] = params.PeerID
 	}
 
 	if params.Key != "" {
@@ -147,35 +164,51 @@ func buildQueryParams(params *Params, profile *client.Profile) map[string]string
 	if profile.SupportsCompact {
 		qp["compact"] = "1"
 	}
-	if profile.NumwantDefault > 0 {
-		qp["numwant"] = strconv.Itoa(profile.NumwantDefault)
+
+	// numwant: use numwantOnStop for "stopped" events if configured
+	numwant := profile.NumwantDefault
+	if params.Event == "stopped" && profile.NumwantOnStop >= 0 {
+		numwant = profile.NumwantOnStop
+	}
+	if numwant > 0 || params.Event == "stopped" {
+		qp["numwant"] = strconv.Itoa(numwant)
+	}
+
+	// Add extra query params from profile (e.g. corrupt, no_peer_id, supportcrypto)
+	for k, v := range profile.ExtraQueryParams {
+		qp[k] = v
 	}
 
 	return qp
 }
 
-func urlEncodeInfoHash(hash [20]byte) string {
+// urlEncodeBytes URL-encodes raw bytes using the given hex format (%02X or %02x).
+// Unreserved chars (RFC 3986) are not encoded: A-Z a-z 0-9 - _ . ~
+func urlEncodeBytes(data []byte, hexFmt string) string {
+	upperCase := hexFmt == "%02X"
 	var result []byte
-	for _, b := range hash {
+	for _, b := range data {
 		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') ||
 			b == '-' || b == '_' || b == '.' || b == '~' {
 			result = append(result, b)
-		} else {
+		} else if upperCase {
 			result = append(result, []byte(fmt.Sprintf("%%%02X", b))...)
+		} else {
+			result = append(result, []byte(fmt.Sprintf("%%%02x", b))...)
 		}
 	}
 	return string(result)
 }
 
-func urlEncodePeerID(peerID string) string {
-	var result []byte
-	for _, b := range []byte(peerID) {
-		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') ||
-			b == '-' || b == '_' || b == '.' || b == '~' {
-			result = append(result, b)
-		} else {
-			result = append(result, []byte(fmt.Sprintf("%%%02X", b))...)
+// containsNonURLSafe checks if a string has bytes that need URL encoding.
+func containsNonURLSafe(s string) bool {
+	for _, b := range []byte(s) {
+		if !((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') ||
+			b == '-' || b == '_' || b == '.' || b == '~' ||
+			b == '(' || b == ')' || b == '!' || b == '*') {
+			return true
 		}
 	}
-	return string(result)
+	return false
 }
+
