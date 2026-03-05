@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/anthony/seed_ghost/internal/bencode"
-	"github.com/anthony/seed_ghost/internal/client"
+	"github.com/aerodomigue/Seed_Ghost/internal/bencode"
+	"github.com/aerodomigue/Seed_Ghost/internal/client"
 )
 
 func TestParseResponseSuccess(t *testing.T) {

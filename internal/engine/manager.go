@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthony/seed_ghost/internal/client"
-	"github.com/anthony/seed_ghost/internal/database"
-	"github.com/anthony/seed_ghost/internal/torrent"
+	"github.com/aerodomigue/Seed_Ghost/internal/client"
+	"github.com/aerodomigue/Seed_Ghost/internal/database"
+	"github.com/aerodomigue/Seed_Ghost/internal/torrent"
 )
 
 // SeedTimeRemainingMs returns the live seed time remaining for a torrent (from session or DB).

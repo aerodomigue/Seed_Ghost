@@ -1,4 +1,4 @@
-module github.com/anthony/seed_ghost
+module github.com/aerodomigue/Seed_Ghost
 
 go 1.25.0
 

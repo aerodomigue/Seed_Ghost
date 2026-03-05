@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthony/seed_ghost/internal/bencode"
-	"github.com/anthony/seed_ghost/internal/client"
+	"github.com/aerodomigue/Seed_Ghost/internal/bencode"
+	"github.com/aerodomigue/Seed_Ghost/internal/client"
 )
 
 // Response represents a parsed tracker announce response.

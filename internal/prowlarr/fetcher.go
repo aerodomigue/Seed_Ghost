@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthony/seed_ghost/internal/database"
-	"github.com/anthony/seed_ghost/internal/engine"
+	"github.com/aerodomigue/Seed_Ghost/internal/database"
+	"github.com/aerodomigue/Seed_Ghost/internal/engine"
 )
 
 // Fetcher periodically searches Prowlarr for popular torrents and adds them.

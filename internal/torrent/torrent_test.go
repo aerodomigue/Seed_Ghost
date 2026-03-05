@@ -3,7 +3,7 @@ package torrent
 import (
 	"testing"
 
-	"github.com/anthony/seed_ghost/internal/bencode"
+	"github.com/aerodomigue/Seed_Ghost/internal/bencode"
 )
 
 func makeTorrentBytes(t *testing.T, announce string, name string, length int64) []byte {

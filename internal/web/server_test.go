@@ -11,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anthony/seed_ghost/internal/bencode"
-	"github.com/anthony/seed_ghost/internal/client"
-	"github.com/anthony/seed_ghost/internal/config"
-	"github.com/anthony/seed_ghost/internal/database"
-	"github.com/anthony/seed_ghost/internal/engine"
+	"github.com/aerodomigue/Seed_Ghost/internal/bencode"
+	"github.com/aerodomigue/Seed_Ghost/internal/client"
+	"github.com/aerodomigue/Seed_Ghost/internal/config"
+	"github.com/aerodomigue/Seed_Ghost/internal/database"
+	"github.com/aerodomigue/Seed_Ghost/internal/engine"
 )
 
 func testServer(t *testing.T) (*Server, *httptest.Server) {

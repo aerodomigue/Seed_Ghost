@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/anthony/seed_ghost/internal/bencode"
+	"github.com/aerodomigue/Seed_Ghost/internal/bencode"
 )
 
 // Torrent represents a parsed .torrent file.

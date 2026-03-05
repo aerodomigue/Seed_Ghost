@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthony/seed_ghost/internal/announce"
-	"github.com/anthony/seed_ghost/internal/client"
-	"github.com/anthony/seed_ghost/internal/database"
-	"github.com/anthony/seed_ghost/internal/torrent"
+	"github.com/aerodomigue/Seed_Ghost/internal/announce"
+	"github.com/aerodomigue/Seed_Ghost/internal/client"
+	"github.com/aerodomigue/Seed_Ghost/internal/database"
+	"github.com/aerodomigue/Seed_Ghost/internal/torrent"
 )
 
 const blockSize64 = int64(blockSize) // 16KB
