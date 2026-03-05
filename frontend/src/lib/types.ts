@@ -6,11 +6,14 @@ export interface Torrent {
   trackerUrl: string
   clientProfile: string
   active: boolean
-  status: 'stopped' | 'pending' | 'seeding'
+  status: 'stopped' | 'pending' | 'downloading' | 'seeding'
   addedAt: string
   source: string
   uploaded: number
   uploadSpeed: number
+  downloaded: number
+  downloadSpeed: number
+  downloadComplete: boolean
   leechers: number
   seeders: number
   indexerId: number | null
@@ -31,6 +34,8 @@ export interface Settings {
   autoStart: boolean
   minUploadSpeedKBs: number
   maxUploadSpeedKBs: number
+  minDownloadSpeedKBs: number
+  maxDownloadSpeedKBs: number
   prowlarrUrl: string
   prowlarrApiKey: string
   fetchIntervalMinutes: number

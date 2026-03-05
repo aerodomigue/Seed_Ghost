@@ -27,6 +27,10 @@ type Config struct {
 	MinUploadSpeedKBs float64 `json:"minUploadSpeedKBs"`
 	MaxUploadSpeedKBs float64 `json:"maxUploadSpeedKBs"`
 
+	// Download speed limits (KB/s) — for fake download simulation
+	MinDownloadSpeedKBs float64 `json:"minDownloadSpeedKBs"`
+	MaxDownloadSpeedKBs float64 `json:"maxDownloadSpeedKBs"`
+
 	// Prowlarr
 	ProwlarrURL    string `json:"prowlarrUrl"`
 	ProwlarrAPIKey string `json:"prowlarrApiKey"`
@@ -46,10 +50,12 @@ func DefaultConfig() *Config {
 		ListenAddr:        ":8333",
 		DatabasePath:      "data/seedghost.db",
 		ProfilesDir:       "profiles",
-		DefaultClient:     "qBittorrent 4.6.2",
+		DefaultClient:     "qBittorrent 5.1.4",
 		AutoStart:         true,
-		MinUploadSpeedKBs: 50,
-		MaxUploadSpeedKBs: 5000,
+		MinUploadSpeedKBs:   50,
+		MaxUploadSpeedKBs:   5000,
+		MinDownloadSpeedKBs: 100,
+		MaxDownloadSpeedKBs: 10000,
 		FetchInterval:     1440,
 		ProwlarrMaxSlots:  5,
 		LogRetentionDays:  7,

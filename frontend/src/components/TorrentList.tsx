@@ -26,7 +26,9 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
             <th className="text-left py-3 px-2">Name</th>
             <th className="text-left py-3 px-2 w-20">Size</th>
             <th className="text-left py-3 px-2 w-20">Uploaded</th>
-            <th className="text-left py-3 px-2 w-24">Speed</th>
+            <th className="text-left py-3 px-2 w-24">UL Speed</th>
+            <th className="text-left py-3 px-2 w-20">Downloaded</th>
+            <th className="text-left py-3 px-2 w-24">DL Speed</th>
             <th className="text-center py-3 px-2 w-16">Ratio</th>
             <th className="text-center py-3 px-2 w-14">L/S</th>
             <th className="text-left py-3 px-2 w-24">Source</th>
@@ -51,6 +53,12 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
                 <td className="py-3 px-2 text-ghost-400 whitespace-nowrap">{formatBytes(t.uploaded)}</td>
                 <td className="py-3 px-2 text-gray-400 whitespace-nowrap">
                   {t.active && t.uploadSpeed > 0 ? `${formatBytes(t.uploadSpeed)}/s` : '-'}
+                </td>
+                <td className="py-3 px-2 text-blue-400 whitespace-nowrap">
+                  {t.downloadComplete ? formatBytes(t.totalSize) : formatBytes(t.downloaded)}
+                </td>
+                <td className="py-3 px-2 text-gray-400 whitespace-nowrap">
+                  {t.active && !t.downloadComplete && t.downloadSpeed > 0 ? `${formatBytes(t.downloadSpeed)}/s` : '-'}
                 </td>
                 <td className="py-3 px-2 text-center whitespace-nowrap">
                   <span className={`font-mono ${parseFloat(ratio) >= 1 ? 'text-green-400' : 'text-yellow-400'}`}>
@@ -79,11 +87,13 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                     t.status === 'seeding'
                       ? 'bg-green-900/50 text-green-400'
+                      : t.status === 'downloading'
+                      ? 'bg-blue-900/50 text-blue-400'
                       : t.status === 'pending'
                       ? 'bg-yellow-900/50 text-yellow-400'
                       : 'bg-gray-800 text-gray-400'
                   }`}>
-                    {t.status === 'seeding' ? 'Seeding' : t.status === 'pending' ? 'Pending' : 'Stopped'}
+                    {t.status === 'seeding' ? 'Seeding' : t.status === 'downloading' ? 'Downloading' : t.status === 'pending' ? 'Pending' : 'Stopped'}
                   </span>
                 </td>
                 <td className="py-3 px-2 text-right">

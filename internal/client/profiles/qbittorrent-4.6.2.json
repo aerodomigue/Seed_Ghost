@@ -1,0 +1,17 @@
+{
+  "name": "qBittorrent 4.6.2",
+  "peerIdPrefix": "-qB4620-",
+  "peerIdSuffixCharset": "alphanumeric_extended",
+  "peerIdUrlEncode": false,
+  "userAgent": "qBittorrent/4.6.2",
+  "keyLength": 8,
+  "keyCharset": "hex_upper_no_leading_zero",
+  "urlEncodingHexCase": "lower",
+  "queryParamOrder": ["info_hash","peer_id","port","uploaded","downloaded","left","corrupt","key","event","numwant","compact","no_peer_id","supportcrypto","redundant"],
+  "portRange": {"min": 10000, "max": 65535},
+  "supportsCompact": true,
+  "numwantDefault": 200,
+  "numwantOnStop": 0,
+  "extraHeaders": {"Accept-Encoding": "gzip", "Connection": "close"},
+  "extraQueryParams": {"corrupt": "0", "no_peer_id": "1", "supportcrypto": "1", "redundant": "0"}
+}

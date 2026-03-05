@@ -18,7 +18,7 @@ export default function App() {
     <BrowserRouter>
       <div className="min-h-screen flex flex-col">
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-3">
-          <div className="max-w-7xl mx-auto flex items-center gap-8">
+          <div className="max-w-[90rem] mx-auto flex items-center gap-8">
             <h1 className="text-xl font-bold text-ghost-400">
               SeedGhost
             </h1>
@@ -42,7 +42,7 @@ export default function App() {
             </div>
           </div>
         </nav>
-        <main className="flex-1 max-w-7xl mx-auto w-full p-6">
+        <main className="flex-1 max-w-[90rem] mx-auto w-full p-6">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/torrents" element={<Torrents />} />

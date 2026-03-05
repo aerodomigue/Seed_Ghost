@@ -15,6 +15,8 @@ export default function Settings() {
   const [autoStart, setAutoStart] = useState(true)
   const [minSpeed, setMinSpeed] = useState(50)
   const [maxSpeed, setMaxSpeed] = useState(5000)
+  const [minDlSpeed, setMinDlSpeed] = useState(100)
+  const [maxDlSpeed, setMaxDlSpeed] = useState(10000)
   const [fetchInterval, setFetchInterval] = useState(1440)
   const [maxSlots, setMaxSlots] = useState(5)
   const [logRetention, setLogRetention] = useState(7)
@@ -29,6 +31,8 @@ export default function Settings() {
       setAutoStart(settings.autoStart)
       setMinSpeed(settings.minUploadSpeedKBs)
       setMaxSpeed(settings.maxUploadSpeedKBs)
+      setMinDlSpeed(settings.minDownloadSpeedKBs || 100)
+      setMaxDlSpeed(settings.maxDownloadSpeedKBs || 10000)
       setFetchInterval(settings.fetchIntervalMinutes || 1440)
       setMaxSlots(settings.prowlarrMaxSlots || 5)
       setLogRetention(settings.logRetentionDays)
@@ -42,6 +46,8 @@ export default function Settings() {
         autoStart,
         minUploadSpeedKBs: minSpeed,
         maxUploadSpeedKBs: maxSpeed,
+        minDownloadSpeedKBs: minDlSpeed,
+        maxDownloadSpeedKBs: maxDlSpeed,
         fetchIntervalMinutes: fetchInterval,
         prowlarrMaxSlots: maxSlots,
         logRetentionDays: logRetention,
@@ -131,6 +137,29 @@ export default function Settings() {
               type="number"
               value={maxSpeed}
               onChange={(e) => setMaxSpeed(parseInt(e.target.value) || 0)}
+              min={1}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Min Download Speed (KB/s)</label>
+            <input
+              type="number"
+              value={minDlSpeed}
+              onChange={(e) => setMinDlSpeed(parseInt(e.target.value) || 0)}
+              min={1}
+              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Max Download Speed (KB/s)</label>
+            <input
+              type="number"
+              value={maxDlSpeed}
+              onChange={(e) => setMaxDlSpeed(parseInt(e.target.value) || 0)}
               min={1}
               className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
             />

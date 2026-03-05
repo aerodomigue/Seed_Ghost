@@ -212,6 +212,12 @@ func (m *Manager) GetSessions() map[int64]*Session {
 func (m *Manager) UpdateConfig(cfg RatioConfig) {
 	m.mu.Lock()
 	m.config = cfg
+	// Update download speeds for sessions still downloading
+	for _, s := range m.sessions {
+		if !s.IsDownloadComplete() {
+			s.SetDownloadSpeed(RandomDownloadSpeed(cfg))
+		}
+	}
 	m.mu.Unlock()
 	m.refreshGlobalSpeed()
 	m.distributeBandwidth()
@@ -325,6 +331,11 @@ func (m *Manager) startSessionFromRow(row *database.TorrentRow) error {
 	state, err := m.db.GetAnnounceState(row.ID)
 	if err == nil {
 		session.RestoreState(state)
+	}
+
+	// Assign random download speed if download is not yet complete
+	if !session.IsDownloadComplete() {
+		session.SetDownloadSpeed(RandomDownloadSpeed(m.config))
 	}
 
 	m.mu.Lock()

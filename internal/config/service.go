@@ -65,6 +65,20 @@ func (s *Service) GetMaxUploadSpeedKBs() float64 {
 	return s.cfg.MaxUploadSpeedKBs
 }
 
+// GetMinDownloadSpeedKBs returns the minimum download speed in KB/s.
+func (s *Service) GetMinDownloadSpeedKBs() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.MinDownloadSpeedKBs
+}
+
+// GetMaxDownloadSpeedKBs returns the maximum download speed in KB/s.
+func (s *Service) GetMaxDownloadSpeedKBs() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.MaxDownloadSpeedKBs
+}
+
 // GetFetchInterval returns the Prowlarr fetch interval in minutes.
 func (s *Service) GetFetchInterval() int {
 	s.mu.RLock()
@@ -127,6 +141,24 @@ var settingsKeys = []struct {
 			}
 		},
 		save: func(c *Config) string { return strconv.FormatFloat(c.MaxUploadSpeedKBs, 'f', -1, 64) },
+	},
+	{
+		key: "min_download_speed_kbs",
+		load: func(v string, c *Config) {
+			if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+				c.MinDownloadSpeedKBs = f
+			}
+		},
+		save: func(c *Config) string { return strconv.FormatFloat(c.MinDownloadSpeedKBs, 'f', -1, 64) },
+	},
+	{
+		key: "max_download_speed_kbs",
+		load: func(v string, c *Config) {
+			if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+				c.MaxDownloadSpeedKBs = f
+			}
+		},
+		save: func(c *Config) string { return strconv.FormatFloat(c.MaxDownloadSpeedKBs, 'f', -1, 64) },
 	},
 	{
 		key: "log_retention_days",

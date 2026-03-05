@@ -8,15 +8,19 @@ const blockSize = 16384 // 16KB - standard BitTorrent block size
 
 // RatioConfig holds the configuration for upload speed calculation.
 type RatioConfig struct {
-	MinSpeedKBs float64 // Minimum global upload speed in KB/s
-	MaxSpeedKBs float64 // Maximum global upload speed in KB/s
+	MinSpeedKBs         float64 // Minimum global upload speed in KB/s
+	MaxSpeedKBs         float64 // Maximum global upload speed in KB/s
+	MinDownloadSpeedKBs float64 // Minimum per-session download speed in KB/s
+	MaxDownloadSpeedKBs float64 // Maximum per-session download speed in KB/s
 }
 
 // DefaultRatioConfig returns a RatioConfig with sensible defaults.
 func DefaultRatioConfig() RatioConfig {
 	return RatioConfig{
-		MinSpeedKBs: 50,
-		MaxSpeedKBs: 5000,
+		MinSpeedKBs:         50,
+		MaxSpeedKBs:         5000,
+		MinDownloadSpeedKBs: 100,
+		MaxDownloadSpeedKBs: 10000,
 	}
 }
 
@@ -25,6 +29,16 @@ func DefaultRatioConfig() RatioConfig {
 func RandomGlobalSpeed(cfg RatioConfig) float64 {
 	minB := cfg.MinSpeedKBs * 1024
 	maxB := cfg.MaxSpeedKBs * 1024
+	if minB >= maxB {
+		return maxB
+	}
+	return minB + rand.Float64()*(maxB-minB)
+}
+
+// RandomDownloadSpeed picks a random per-session download speed between min and max (in bytes/s).
+func RandomDownloadSpeed(cfg RatioConfig) float64 {
+	minB := cfg.MinDownloadSpeedKBs * 1024
+	maxB := cfg.MaxDownloadSpeedKBs * 1024
 	if minB >= maxB {
 		return maxB
 	}

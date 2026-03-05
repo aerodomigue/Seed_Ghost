@@ -26,10 +26,11 @@ type Session struct {
 	Profile   *client.Profile
 
 	// State
-	PeerID   string
-	Key      string
-	Port     int
-	Uploaded int64
+	PeerID     string
+	Key        string
+	Port       int
+	Uploaded   int64
+	Downloaded int64
 
 	// Tracking
 	lastInterval   int
@@ -40,6 +41,13 @@ type Session struct {
 	currentSpeed   float64 // actual speed with jitter (bytes/s)
 	accumulator    float64 // fractional bytes not yet added to Uploaded
 
+	// Download simulation
+	downloadSpeed        float64 // assigned download speed (bytes/s)
+	currentDownloadSpeed float64 // actual download speed with jitter (bytes/s)
+	downloadAccumulator  float64 // fractional bytes not yet added to Downloaded
+	downloadComplete     bool    // true when Downloaded >= TotalSize
+	downloadedAtLastAnnounce int64
+
 	// Seed time countdown (nil = manual torrent, skip decrement)
 	seedTimeRemainingMs *int64
 
@@ -49,6 +57,9 @@ type Session struct {
 
 	// TCP listener for connectable check
 	listener net.Listener
+
+	// Signals announceLoop to send "completed" immediately
+	downloadDone chan struct{}
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -63,6 +74,7 @@ func NewSession(torrentID int64, tor *torrent.Torrent, profile *client.Profile, 
 		Profile:      profile,
 		lastInterval: 1800, // Default 30 min
 		db:           db,
+		downloadDone: make(chan struct{}, 1),
 	}
 }
 
@@ -75,6 +87,11 @@ func (s *Session) RestoreState(state *database.AnnounceStateRow) {
 	s.Port = state.Port
 	s.Uploaded = state.Uploaded
 	s.uploadedAtLastAnnounce = state.Uploaded
+	s.Downloaded = state.Downloaded
+	s.downloadedAtLastAnnounce = state.Downloaded
+	if s.Downloaded >= s.Torrent.TotalSize {
+		s.downloadComplete = true
+	}
 	s.lastInterval = state.LastInterval
 	s.lastLeechers = state.LastLeechers
 	s.lastSeeders = state.LastSeeders
@@ -93,13 +110,14 @@ func (s *Session) Start(ctx context.Context) {
 		s.Port = s.Profile.RandomPort()
 	}
 	s.uploadedAtLastAnnounce = s.Uploaded
+	s.downloadedAtLastAnnounce = s.Downloaded
 	s.mu.Unlock()
 
 	// Start TCP listener for connectable checks
 	s.startListener()
 
 	s.wg.Add(2)
-	go s.simulateUpload(ctx)
+	go s.simulateTraffic(ctx)
 	go s.announceLoop(ctx)
 }
 
@@ -125,6 +143,7 @@ func (s *Session) GetState() *database.AnnounceStateRow {
 		Key:          s.Key,
 		Port:         s.Port,
 		Uploaded:     s.Uploaded,
+		Downloaded:   s.Downloaded,
 		LastAnnounce: &now,
 		LastInterval: s.lastInterval,
 		LastLeechers: s.lastLeechers,
@@ -138,6 +157,34 @@ func (s *Session) GetSpeed() float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.currentSpeed
+}
+
+// GetDownloadSpeed returns the current simulated download speed in bytes/s.
+func (s *Session) GetDownloadSpeed() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentDownloadSpeed
+}
+
+// SetDownloadSpeed sets the assigned download speed in bytes/s.
+func (s *Session) SetDownloadSpeed(bytesPerSec float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.downloadSpeed = bytesPerSec
+}
+
+// IsDownloadComplete returns whether the download simulation has finished.
+func (s *Session) IsDownloadComplete() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.downloadComplete
+}
+
+// GetDownloaded returns the current simulated downloaded bytes.
+func (s *Session) GetDownloaded() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Downloaded
 }
 
 // HasAnnounced returns true if at least one successful announce has been made.
@@ -186,8 +233,8 @@ func (s *Session) GetSeeders() int {
 	return s.lastSeeders
 }
 
-// simulateUpload increments Uploaded every second based on the allocated speed.
-func (s *Session) simulateUpload(ctx context.Context) {
+// simulateTraffic increments Uploaded and Downloaded every second based on allocated speeds.
+func (s *Session) simulateTraffic(ctx context.Context) {
 	defer s.wg.Done()
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -202,13 +249,13 @@ func (s *Session) simulateUpload(ctx context.Context) {
 			if s.seedTimeRemainingMs != nil {
 				*s.seedTimeRemainingMs -= 1000
 			}
+
+			// Upload simulation
 			if s.allocatedSpeed > 0 {
-				// ±5% jitter per tick
 				jitter := 1.0 + (mrand.Float64()*0.1 - 0.05)
 				speed := s.allocatedSpeed * jitter
 				s.currentSpeed = speed
 
-				// Accumulate bytes and flush whole blocks
 				s.accumulator += speed
 				blocks := int64(s.accumulator) / blockSize64
 				if blocks > 0 {
@@ -219,6 +266,34 @@ func (s *Session) simulateUpload(ctx context.Context) {
 				s.currentSpeed = 0
 				s.accumulator = 0
 			}
+
+			// Download simulation
+			if !s.downloadComplete && s.downloadSpeed > 0 {
+				jitter := 1.0 + (mrand.Float64()*0.1 - 0.05)
+				dlSpeed := s.downloadSpeed * jitter
+				s.currentDownloadSpeed = dlSpeed
+
+				s.downloadAccumulator += dlSpeed
+				blocks := int64(s.downloadAccumulator) / blockSize64
+				if blocks > 0 {
+					s.Downloaded += blocks * blockSize64
+					s.downloadAccumulator -= float64(blocks * blockSize64)
+				}
+
+				if s.Downloaded >= s.Torrent.TotalSize {
+					s.Downloaded = s.Torrent.TotalSize
+					s.downloadComplete = true
+					s.currentDownloadSpeed = 0
+					// Signal announceLoop to send "completed" immediately
+					select {
+					case s.downloadDone <- struct{}{}:
+					default:
+					}
+				}
+			} else if s.downloadComplete {
+				s.currentDownloadSpeed = 0
+			}
+
 			s.mu.Unlock()
 		}
 	}
@@ -280,9 +355,12 @@ func (s *Session) announceLoop(ctx context.Context) {
 	s.doAnnounce("started")
 	s.saveState()
 
+	sentCompleted := false
+
 	for {
 		s.mu.Lock()
 		interval := s.lastInterval
+		dlComplete := s.downloadComplete
 		s.mu.Unlock()
 
 		// Apply jitter to interval, respect min_interval
@@ -300,8 +378,19 @@ func (s *Session) announceLoop(ctx context.Context) {
 			// Send stopped event
 			s.doAnnounce("stopped")
 			return
+		case <-s.downloadDone:
+			timer.Stop()
+			s.doAnnounce("completed")
+			sentCompleted = true
+			s.saveState()
 		case <-timer.C:
-			s.doAnnounce("")
+			// Send "completed" event once when download finishes (fallback if signal missed)
+			if dlComplete && !sentCompleted {
+				s.doAnnounce("completed")
+				sentCompleted = true
+			} else {
+				s.doAnnounce("")
+			}
 			s.saveState()
 		}
 	}
@@ -313,17 +402,28 @@ func (s *Session) doAnnounce(event string) {
 	}
 
 	s.mu.Lock()
-	// Delta is what accumulated since last announce (from simulateUpload)
+	// Delta is what accumulated since last announce (from simulateTraffic)
 	delta := s.Uploaded - s.uploadedAtLastAnnounce
 	s.uploadedAtLastAnnounce = s.Uploaded
+	s.downloadedAtLastAnnounce = s.Downloaded
+
+	left := s.Torrent.TotalSize - s.Downloaded
+	if left < 0 {
+		left = 0
+	}
+	downloaded := s.Downloaded
+	if s.downloadComplete {
+		downloaded = s.Torrent.TotalSize
+		left = 0
+	}
 
 	baseParams := announce.Params{
 		InfoHash:   s.Torrent.InfoHash,
 		PeerID:     s.PeerID,
 		Port:       s.Port,
 		Uploaded:   s.Uploaded,
-		Downloaded: s.Torrent.TotalSize, // Already downloaded everything (seeding)
-		Left:       0,                   // Always seeding (left=0)
+		Downloaded: downloaded,
+		Left:       left,
 		Event:      event,
 		Key:        s.Key,
 		Compact:    s.Profile.SupportsCompact,

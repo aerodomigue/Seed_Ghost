@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/anthony/seed_ghost/internal/bencode"
@@ -175,7 +176,11 @@ func buildQueryParams(params *Params, profile *client.Profile) map[string]string
 	}
 
 	// Add extra query params from profile (e.g. corrupt, no_peer_id, supportcrypto)
+	portStr := strconv.Itoa(params.Port)
 	for k, v := range profile.ExtraQueryParams {
+		if strings.Contains(v, "{port}") {
+			v = strings.ReplaceAll(v, "{port}", portStr)
+		}
 		qp[k] = v
 	}
 

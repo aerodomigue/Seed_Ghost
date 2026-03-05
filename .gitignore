@@ -15,3 +15,12 @@ web/dist/
 .idea/
 *.swp
 *.swo
+
+
+# AI Agent
+.claude
+.gemini
+.cursor
+CLAUDE.md
+AGENT.md
+GEMINI.md

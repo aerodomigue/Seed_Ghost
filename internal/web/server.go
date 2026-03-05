@@ -124,11 +124,14 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 		TrackerURL          string  `json:"trackerUrl"`
 		ClientProfile       string  `json:"clientProfile"`
 		Active              bool    `json:"active"`
-		Status              string  `json:"status"` // "stopped", "pending", "seeding"
+		Status              string  `json:"status"` // "stopped", "pending", "downloading", "seeding"
 		AddedAt             string  `json:"addedAt"`
 		Source              string  `json:"source"`
 		Uploaded            int64   `json:"uploaded"`
 		UploadSpeed         float64 `json:"uploadSpeed"` // bytes/s
+		Downloaded          int64   `json:"downloaded"`
+		DownloadSpeed       float64 `json:"downloadSpeed"` // bytes/s
+		DownloadComplete    bool    `json:"downloadComplete"`
 		Leechers            int     `json:"leechers"`
 		Seeders             int     `json:"seeders"`
 		IndexerID           *int64  `json:"indexerId"`
@@ -156,17 +159,26 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 		if session, ok := sessions[row.ID]; ok {
 			state := session.GetState()
 			tr.Uploaded = state.Uploaded
+			tr.Downloaded = state.Downloaded
 			tr.Leechers = state.LastLeechers
 			tr.Seeders = state.LastSeeders
 			tr.UploadSpeed = session.GetSpeed()
+			tr.DownloadSpeed = session.GetDownloadSpeed()
+			tr.DownloadComplete = session.IsDownloadComplete()
 			tr.SeedTimeRemainingMs = session.GetSeedTimeRemainingMs()
 			if session.HasAnnounced() {
-				tr.Status = "seeding"
+				if !tr.DownloadComplete {
+					tr.Status = "downloading"
+				} else {
+					tr.Status = "seeding"
+				}
 			} else {
 				tr.Status = "pending"
 			}
 		} else if state, err := s.db.GetAnnounceState(row.ID); err == nil {
 			tr.Uploaded = state.Uploaded
+			tr.Downloaded = state.Downloaded
+			tr.DownloadComplete = state.Downloaded >= row.TotalSize
 			tr.Leechers = state.LastLeechers
 			tr.Seeders = state.LastSeeders
 		}
@@ -343,6 +355,8 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			cfg.AutoStart = incoming.AutoStart
 			cfg.MinUploadSpeedKBs = incoming.MinUploadSpeedKBs
 			cfg.MaxUploadSpeedKBs = incoming.MaxUploadSpeedKBs
+			cfg.MinDownloadSpeedKBs = incoming.MinDownloadSpeedKBs
+			cfg.MaxDownloadSpeedKBs = incoming.MaxDownloadSpeedKBs
 			cfg.LogRetentionDays = incoming.LogRetentionDays
 			if incoming.FetchInterval > 0 {
 				cfg.FetchInterval = incoming.FetchInterval
@@ -355,8 +369,10 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		// Update ratio config in running sessions
 		cfg := s.config.Get()
 		s.manager.UpdateConfig(engine.RatioConfig{
-			MinSpeedKBs: cfg.MinUploadSpeedKBs,
-			MaxSpeedKBs: cfg.MaxUploadSpeedKBs,
+			MinSpeedKBs:         cfg.MinUploadSpeedKBs,
+			MaxSpeedKBs:         cfg.MaxUploadSpeedKBs,
+			MinDownloadSpeedKBs: cfg.MinDownloadSpeedKBs,
+			MaxDownloadSpeedKBs: cfg.MaxDownloadSpeedKBs,
 		})
 
 		jsonResponse(w, cfg)
