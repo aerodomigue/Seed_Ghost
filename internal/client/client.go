@@ -16,17 +16,29 @@ import (
 
 // Profile represents a BitTorrent client profile for emulation.
 type Profile struct {
-	Name              string            `json:"name"`
-	PeerIDPrefix      string            `json:"peerIdPrefix"`
-	PeerIDSuffixType  string            `json:"peerIdSuffixCharset"` // "random_bytes" or "alphanumeric"
-	UserAgent         string            `json:"userAgent"`
-	KeyLength         int               `json:"keyLength"`
-	KeyCharset        string            `json:"keyCharset"` // "hex_lower", "hex_upper", "alphanumeric"
-	QueryParamOrder   []string          `json:"queryParamOrder"`
-	PortRange         PortRange         `json:"portRange"`
-	SupportsCompact   bool              `json:"supportsCompact"`
-	NumwantDefault    int               `json:"numwantDefault"`
-	ExtraHeaders      map[string]string `json:"extraHeaders"`
+	Name               string            `json:"name"`
+	PeerIDPrefix       string            `json:"peerIdPrefix"`
+	PeerIDSuffixType   string            `json:"peerIdSuffixCharset"` // "random_bytes", "alphanumeric", "alphanumeric_extended"
+	PeerIDUrlEncode    *bool             `json:"peerIdUrlEncode"`     // whether to URL-encode peer_id (default true)
+	UserAgent          string            `json:"userAgent"`
+	KeyLength          int               `json:"keyLength"`
+	KeyCharset         string            `json:"keyCharset"`      // "hex_lower", "hex_upper", "hex_upper_no_leading_zero", "alphanumeric"
+	UrlEncodingHexCase string            `json:"urlEncodingHexCase"` // "upper" (default) or "lower"
+	QueryParamOrder    []string          `json:"queryParamOrder"`
+	PortRange          PortRange         `json:"portRange"`
+	SupportsCompact    bool              `json:"supportsCompact"`
+	NumwantDefault     int               `json:"numwantDefault"`
+	NumwantOnStop      int               `json:"numwantOnStop"` // numwant to send on "stopped" event (default: same as numwantDefault)
+	ExtraHeaders       map[string]string `json:"extraHeaders"`
+	ExtraQueryParams   map[string]string `json:"extraQueryParams"` // e.g. {"corrupt":"0","no_peer_id":"1","supportcrypto":"1"}
+}
+
+// ShouldUrlEncodePeerID returns whether peer_id should be URL-encoded.
+func (p *Profile) ShouldUrlEncodePeerID() bool {
+	if p.PeerIDUrlEncode == nil {
+		return true
+	}
+	return *p.PeerIDUrlEncode
 }
 
 // PortRange defines the port range for the emulated client.
@@ -47,6 +59,15 @@ func (p *Profile) GeneratePeerID() string {
 	switch p.PeerIDSuffixType {
 	case "alphanumeric":
 		const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+		b := make([]byte, suffixLen)
+		for i := range b {
+			n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+			b[i] = charset[n.Int64()]
+		}
+		suffix = string(b)
+	case "alphanumeric_extended":
+		// Matches JOAL pattern: [A-Za-z0-9_~()\!\.\*-]
+		const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_~()!.*-"
 		b := make([]byte, suffixLen)
 		for i := range b {
 			n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
@@ -74,6 +95,16 @@ func (p *Profile) GenerateKey() string {
 		b := make([]byte, (length+1)/2)
 		rand.Read(b)
 		return strings.ToUpper(hex.EncodeToString(b))[:length]
+	case "hex_upper_no_leading_zero":
+		// JOAL HASH_NO_LEADING_ZERO: hex uppercase, first char is never '0'
+		for {
+			b := make([]byte, (length+1)/2)
+			rand.Read(b)
+			key := strings.ToUpper(hex.EncodeToString(b))[:length]
+			if key[0] != '0' {
+				return key
+			}
+		}
 	case "alphanumeric":
 		const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 		result := make([]byte, length)
