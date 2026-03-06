@@ -1,4 +1,6 @@
-# SeedGhost
+<p align="center">
+  <img src="assets/banner.png" alt="SeedGhost" width="600"/>
+</p>
 
 Torrent ratio boosting tool that emulates BitTorrent clients by sending tracker announces with spoofed upload stats. No actual BitTorrent traffic occurs — only HTTP tracker requests.
 

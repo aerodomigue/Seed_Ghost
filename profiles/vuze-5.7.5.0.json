@@ -1,0 +1,17 @@
+{
+  "name": "Vuze 5.7.5.0",
+  "peerIdPrefix": "-AZ5750-",
+  "peerIdSuffixCharset": "alphanumeric",
+  "peerIdUrlEncode": false,
+  "userAgent": "Azureus 5.7.5.0;Linux;Java 11.0.2",
+  "keyLength": 8,
+  "keyCharset": "alphanumeric",
+  "urlEncodingHexCase": "upper",
+  "queryParamOrder": ["info_hash","peer_id","port","azudp","uploaded","downloaded","left","corrupt","event","numwant","no_peer_id","compact","key","azver"],
+  "portRange": {"min": 10000, "max": 65535},
+  "supportsCompact": true,
+  "numwantDefault": 100,
+  "numwantOnStop": 0,
+  "extraHeaders": {"Connection": "close", "Accept-Encoding": "gzip", "Accept": "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"},
+  "extraQueryParams": {"corrupt": "0", "no_peer_id": "1", "compact": "1", "azudp": "{port}", "azver": "3"}
+}

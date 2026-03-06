@@ -1,0 +1,17 @@
+{
+  "name": "Transmission 3.00",
+  "peerIdPrefix": "-TR3000-",
+  "peerIdSuffixCharset": "alphanumeric",
+  "peerIdUrlEncode": false,
+  "userAgent": "Transmission/3.00",
+  "keyLength": 8,
+  "keyCharset": "hex_lower",
+  "urlEncodingHexCase": "lower",
+  "queryParamOrder": ["info_hash","peer_id","port","uploaded","downloaded","left","numwant","key","compact","supportcrypto","event"],
+  "portRange": {"min": 10000, "max": 65535},
+  "supportsCompact": true,
+  "numwantDefault": 80,
+  "numwantOnStop": 0,
+  "extraHeaders": {"Accept": "*/*", "Accept-Encoding": "deflate, gzip"},
+  "extraQueryParams": {"compact": "1", "supportcrypto": "1"}
+}
