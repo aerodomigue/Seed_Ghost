@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/aerodomigue/Seed_Ghost/internal/bootstrap"
 	"github.com/aerodomigue/Seed_Ghost/internal/client"
 	"github.com/aerodomigue/Seed_Ghost/internal/config"
 	"github.com/aerodomigue/Seed_Ghost/internal/database"
@@ -35,6 +36,11 @@ func main() {
 	// Ensure data directory exists
 	if err := os.MkdirAll(fileCfg.DataDir, 0755); err != nil {
 		log.Fatalf("create data dir: %v", err)
+	}
+
+	// Run first-start initialization (bootstrap profiles, etc.)
+	if err := bootstrap.Run(fileCfg.DataDir, fileCfg.ProfilesDir); err != nil {
+		log.Fatalf("bootstrap: %v", err)
 	}
 
 	// Open database
