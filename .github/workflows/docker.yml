@@ -31,6 +31,8 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ghcr.io/aerodomigue/seed_ghost:${{ steps.version.outputs.version }}
             ghcr.io/aerodomigue/seed_ghost:latest
