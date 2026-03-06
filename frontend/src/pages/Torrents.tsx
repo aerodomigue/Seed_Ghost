@@ -69,16 +69,16 @@ export default function Torrents() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Torrents</h2>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-gray-400 mb-3">Add Torrent</h3>
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-dark-400 mb-3">Add Torrent</h3>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Torrent File</label>
+            <label className="block text-xs text-dark-500 mb-1">Torrent File</label>
             <input
               ref={fileRef}
               type="file"
               accept=".torrent"
-              className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-gray-800 file:text-gray-300 hover:file:bg-gray-700"
+              className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-dark-800 file:text-dark-300 hover:file:bg-dark-700"
             />
           </div>
           <button
@@ -90,7 +90,7 @@ export default function Torrents() {
         </div>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-4">
         <TorrentList
           torrents={torrents || []}
           indexerMap={indexerMap}

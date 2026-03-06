@@ -86,16 +86,16 @@ export default function Settings() {
     <div className="space-y-6 max-w-2xl">
       <h2 className="text-2xl font-bold">Settings</h2>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
-        <h3 className="text-sm font-medium text-gray-400">General</h3>
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-6 space-y-4">
+        <h3 className="text-sm font-medium text-dark-400">General</h3>
 
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Default Client Profile</label>
+          <label className="block text-xs text-dark-500 mb-1">Default Client Profile</label>
           <div className="flex gap-2">
             <select
               value={defaultClient}
               onChange={(e) => setDefaultClient(e.target.value)}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="flex-1 bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             >
               {profileNames.map((name) => (
                 <option key={name} value={name}>{name}</option>
@@ -103,7 +103,7 @@ export default function Settings() {
             </select>
             <button
               onClick={handleRefreshProfiles}
-              className="px-3 py-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 text-sm"
+              className="px-3 py-2 bg-dark-800 text-dark-300 rounded hover:bg-dark-700 text-sm"
             >
               Refresh Profiles
             </button>
@@ -115,89 +115,89 @@ export default function Settings() {
             type="checkbox"
             checked={autoStart}
             onChange={(e) => setAutoStart(e.target.checked)}
-            className="rounded bg-gray-800 border-gray-700"
+            className="rounded bg-dark-800 border-dark-700"
           />
           Auto-start torrents when added
         </label>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Min Upload Speed (KB/s)</label>
+            <label className="block text-xs text-dark-500 mb-1">Min Upload Speed (KB/s)</label>
             <input
               type="number"
               value={minSpeed}
               onChange={(e) => setMinSpeed(parseInt(e.target.value) || 0)}
               min={1}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Max Upload Speed (KB/s)</label>
+            <label className="block text-xs text-dark-500 mb-1">Max Upload Speed (KB/s)</label>
             <input
               type="number"
               value={maxSpeed}
               onChange={(e) => setMaxSpeed(parseInt(e.target.value) || 0)}
               min={1}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Min Download Speed (KB/s)</label>
+            <label className="block text-xs text-dark-500 mb-1">Min Download Speed (KB/s)</label>
             <input
               type="number"
               value={minDlSpeed}
               onChange={(e) => setMinDlSpeed(parseInt(e.target.value) || 0)}
               min={1}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Max Download Speed (KB/s)</label>
+            <label className="block text-xs text-dark-500 mb-1">Max Download Speed (KB/s)</label>
             <input
               type="number"
               value={maxDlSpeed}
               onChange={(e) => setMaxDlSpeed(parseInt(e.target.value) || 0)}
               min={1}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Prowlarr Fetch Interval (minutes)</label>
+            <label className="block text-xs text-dark-500 mb-1">Prowlarr Fetch Interval (minutes)</label>
             <input
               type="number"
               value={fetchInterval}
               onChange={(e) => setFetchInterval(parseInt(e.target.value) || 1440)}
               min={5}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Default Max Active Torrents</label>
+            <label className="block text-xs text-dark-500 mb-1">Default Max Active Torrents</label>
             <input
               type="number"
               value={maxSlots}
               onChange={(e) => setMaxSlots(parseInt(e.target.value) || 5)}
               min={1}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Log Retention (days)</label>
+            <label className="block text-xs text-dark-500 mb-1">Log Retention (days)</label>
             <input
               type="number"
               value={logRetention}
               onChange={(e) => setLogRetention(parseInt(e.target.value) || 7)}
               min={1}
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
         </div>
@@ -210,21 +210,21 @@ export default function Settings() {
         </button>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
-        <h3 className="text-sm font-medium text-gray-400">Ratio Targets</h3>
-        <p className="text-xs text-gray-500">Set a target ratio per tracker. Seeding stops when the target is reached.</p>
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-6 space-y-4">
+        <h3 className="text-sm font-medium text-dark-400">Ratio Targets</h3>
+        <p className="text-xs text-dark-500">Set a target ratio per tracker. Seeding stops when the target is reached.</p>
 
         {ratioTargets && Object.keys(ratioTargets).length > 0 && (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400">
+              <tr className="border-b border-dark-800 text-dark-400">
                 <th className="text-left py-2">Tracker Host</th>
                 <th className="text-right py-2">Target Ratio</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(ratioTargets).map(([host, ratio]) => (
-                <tr key={host} className="border-b border-gray-800/50">
+                <tr key={host} className="border-b border-dark-800/50">
                   <td className="py-2">{host}</td>
                   <td className="py-2 text-right font-mono">{ratio}</td>
                 </tr>
@@ -235,29 +235,29 @@ export default function Settings() {
 
         <div className="flex gap-2 items-end">
           <div className="flex-1">
-            <label className="block text-xs text-gray-500 mb-1">Tracker Host</label>
+            <label className="block text-xs text-dark-500 mb-1">Tracker Host</label>
             <input
               type="text"
               value={newHost}
               onChange={(e) => setNewHost(e.target.value)}
               placeholder="tracker.example.com"
-              className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Ratio</label>
+            <label className="block text-xs text-dark-500 mb-1">Ratio</label>
             <input
               type="number"
               value={newRatio}
               onChange={(e) => setNewRatio(parseFloat(e.target.value) || 2.0)}
               step={0.5}
               min={0.1}
-              className="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+              className="w-24 bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
             />
           </div>
           <button
             onClick={handleAddRatioTarget}
-            className="px-3 py-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 text-sm"
+            className="px-3 py-2 bg-dark-800 text-dark-300 rounded hover:bg-dark-700 text-sm"
           >
             Add
           </button>

@@ -131,26 +131,26 @@ export default function Prowlarr() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Prowlarr Integration</h2>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4 max-w-xl">
-        <h3 className="text-sm font-medium text-gray-400">Configuration</h3>
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-6 space-y-4 max-w-xl">
+        <h3 className="text-sm font-medium text-dark-400">Configuration</h3>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Prowlarr URL</label>
+          <label className="block text-xs text-dark-500 mb-1">Prowlarr URL</label>
           <input
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="http://localhost:9696"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">API Key</label>
+          <label className="block text-xs text-dark-500 mb-1">API Key</label>
           <input
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder="Enter Prowlarr API key"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            className="w-full bg-dark-800 border border-dark-700 rounded px-3 py-2 text-sm"
           />
         </div>
         <div className="flex gap-3">
@@ -163,7 +163,7 @@ export default function Prowlarr() {
           <button
             onClick={handleFetch}
             disabled={fetching}
-            className="px-4 py-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 text-sm font-medium disabled:opacity-50"
+            className="px-4 py-2 bg-dark-800 text-dark-300 rounded hover:bg-dark-700 text-sm font-medium disabled:opacity-50"
           >
             {fetching ? 'Syncing...' : 'Sync Torrents'}
           </button>
@@ -173,12 +173,12 @@ export default function Prowlarr() {
         )}
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-gray-400">Indexers</h3>
+            <h3 className="text-sm font-medium text-dark-400">Indexers</h3>
             {indexers.length > 0 && (
-              <p className="text-xs text-gray-500 mt-1">{selectedCount} selected out of {indexers.length}</p>
+              <p className="text-xs text-dark-500 mt-1">{selectedCount} selected out of {indexers.length}</p>
             )}
           </div>
           <button
@@ -195,7 +195,7 @@ export default function Prowlarr() {
         )}
 
         {indexers.length === 0 && !indexerError && (
-          <p className="text-gray-500 text-sm">
+          <p className="text-dark-500 text-sm">
             Click "Load from Prowlarr" to fetch available indexers.
           </p>
         )}
@@ -205,7 +205,7 @@ export default function Prowlarr() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800 text-gray-400">
+                  <tr className="border-b border-dark-800 text-dark-400">
                     <th className="text-left py-2 px-2 w-10">Use</th>
                     <th className="text-left py-2 px-2 w-14">ID</th>
                     <th className="text-left py-2 px-2">Name</th>
@@ -220,21 +220,21 @@ export default function Prowlarr() {
                 </thead>
                 <tbody>
                   {indexers.map((idx) => (
-                    <tr key={idx.id} className="border-b border-gray-800/50 hover:bg-gray-900/50">
+                    <tr key={idx.id} className="border-b border-dark-800/50 hover:bg-dark-900/50">
                       <td className="py-2 px-2">
                         <input
                           type="checkbox"
                           checked={idx.selected}
                           onChange={() => toggleIndexer(idx.id)}
-                          className="rounded bg-gray-800 border-gray-700"
+                          className="rounded bg-dark-800 border-dark-700"
                         />
                       </td>
-                      <td className="py-2 px-2 text-gray-500 font-mono text-xs">{idx.id}</td>
+                      <td className="py-2 px-2 text-dark-500 font-mono text-xs">{idx.id}</td>
                       <td className="py-2 px-2 font-medium">{idx.name}</td>
-                      <td className="py-2 px-2 text-gray-400">{idx.protocol}</td>
-                      <td className="py-2 px-2 text-gray-400 text-xs">{idx.implementationName}</td>
+                      <td className="py-2 px-2 text-dark-400">{idx.protocol}</td>
+                      <td className="py-2 px-2 text-dark-400 text-xs">{idx.implementationName}</td>
                       <td className="py-2 px-2 text-center">
-                        <span className={`inline-block w-2 h-2 rounded-full ${idx.enable ? 'bg-green-400' : 'bg-gray-600'}`} />
+                        <span className={`inline-block w-2 h-2 rounded-full ${idx.enable ? 'bg-green-400' : 'bg-dark-600'}`} />
                       </td>
                       <td className="py-2 px-2">
                         <input
@@ -243,7 +243,7 @@ export default function Prowlarr() {
                           onChange={(e) => setIndexerSpeed(idx.id, e.target.value ? parseInt(e.target.value) : null)}
                           placeholder="Default"
                           disabled={!idx.selected}
-                          className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs disabled:opacity-40"
+                          className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -253,7 +253,7 @@ export default function Prowlarr() {
                           onChange={(e) => setIndexerFetchInterval(idx.id, e.target.value ? parseInt(e.target.value) : null)}
                           placeholder="Default"
                           disabled={!idx.selected}
-                          className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs disabled:opacity-40"
+                          className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -263,7 +263,7 @@ export default function Prowlarr() {
                           onChange={(e) => setIndexerMaxSlots(idx.id, e.target.value ? parseInt(e.target.value) : null)}
                           placeholder="Default"
                           disabled={!idx.selected}
-                          className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs disabled:opacity-40"
+                          className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -273,7 +273,7 @@ export default function Prowlarr() {
                           onChange={(e) => setIndexerSeedTime(idx.id, e.target.value ? parseInt(e.target.value) : null)}
                           placeholder="72"
                           disabled={!idx.selected}
-                          className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs disabled:opacity-40"
+                          className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
                       </td>
                     </tr>

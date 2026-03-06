@@ -45,27 +45,27 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-gray-400 mb-4">Upload Progress (24h)</h3>
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-dark-400 mb-4">Upload Progress (24h)</h3>
         <div className="h-64">
           {chartData.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
-                <XAxis dataKey="time" tick={{ fill: '#6b7280', fontSize: 12 }} />
+                <XAxis dataKey="time" tick={{ fill: '#5a756a', fontSize: 12 }} />
                 <YAxis
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                  tick={{ fill: '#5a756a', fontSize: 12 }}
                   tickFormatter={(v: number) => formatBytes(v)}
                 />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: 8 }}
-                  labelStyle={{ color: '#9ca3af' }}
+                  contentStyle={{ backgroundColor: '#111916', border: '1px solid #25342d', borderRadius: 8 }}
+                  labelStyle={{ color: '#829a90' }}
                   formatter={(v: number) => [formatBytes(v), 'Uploaded']}
                 />
-                <Area type="monotone" dataKey="uploaded" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.1} />
+                <Area type="monotone" dataKey="uploaded" stroke="#10b981" fill="#10b981" fillOpacity={0.1} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="flex items-center justify-center h-full text-dark-500">
               Collecting data...
             </div>
           )}
@@ -73,15 +73,15 @@ export default function Dashboard() {
       </div>
 
       {activeTorrents.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-400 mb-3">Active Torrents</h3>
+        <div className="bg-dark-900 border border-dark-800 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-dark-400 mb-3">Active Torrents</h3>
           <div className="space-y-2">
             {activeTorrents.map((t) => (
-              <div key={t.id} className="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0">
+              <div key={t.id} className="flex items-center justify-between py-2 border-b border-dark-800/50 last:border-0">
                 <div className="truncate max-w-md">
                   <span className="text-sm">{t.name}</span>
                 </div>
-                <div className="flex gap-4 text-sm text-gray-400">
+                <div className="flex gap-4 text-sm text-dark-400">
                   <span>Up: {formatBytes(t.uploaded)}</span>
                   <span>L/S: {t.leechers}/{t.seeders}</span>
                 </div>

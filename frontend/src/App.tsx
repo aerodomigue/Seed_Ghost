@@ -17,7 +17,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen flex flex-col">
-        <nav className="bg-gray-900 border-b border-gray-800 px-6 py-3">
+        <nav className="bg-dark-900 border-b border-dark-800 px-6 py-3">
           <div className="max-w-[90rem] mx-auto flex items-center gap-8">
             <h1 className="text-xl font-bold text-ghost-400">
               SeedGhost
@@ -31,8 +31,8 @@ export default function App() {
                   className={({ isActive }) =>
                     `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       isActive
-                        ? 'bg-gray-800 text-ghost-400'
-                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+                        ? 'bg-dark-800 text-ghost-400'
+                        : 'text-dark-400 hover:text-dark-200 hover:bg-dark-800/50'
                     }`
                   }
                 >
