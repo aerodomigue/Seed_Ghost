@@ -36,3 +36,5 @@ jobs:
           tags: |
             ghcr.io/aerodomigue/seed_ghost:${{ steps.version.outputs.version }}
             ghcr.io/aerodomigue/seed_ghost:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
