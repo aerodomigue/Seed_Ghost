@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -76,14 +77,14 @@ func (db *DB) migrate() error {
 			last_delta INTEGER NOT NULL DEFAULT 0
 		);
 
-		CREATE TABLE IF NOT EXISTS stats_log (
+		CREATE TABLE IF NOT EXISTS stats_snapshots (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			torrent_id INTEGER REFERENCES torrents(id) ON DELETE CASCADE,
 			timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			uploaded_total INTEGER NOT NULL,
-			leechers INTEGER NOT NULL DEFAULT 0,
-			seeders INTEGER NOT NULL DEFAULT 0
+			total_uploaded INTEGER NOT NULL DEFAULT 0,
+			total_leechers INTEGER NOT NULL DEFAULT 0,
+			total_seeders INTEGER NOT NULL DEFAULT 0
 		);
+		CREATE INDEX IF NOT EXISTS idx_stats_snapshots_ts ON stats_snapshots(timestamp);
 
 		CREATE TABLE IF NOT EXISTS settings (
 			key TEXT PRIMARY KEY,
@@ -120,7 +121,6 @@ func (db *DB) migrate() error {
 
 		CREATE INDEX IF NOT EXISTS idx_announce_logs_torrent ON announce_logs(torrent_id);
 		CREATE INDEX IF NOT EXISTS idx_announce_logs_timestamp ON announce_logs(timestamp);
-		CREATE INDEX IF NOT EXISTS idx_stats_log_torrent ON stats_log(torrent_id);
 	`)
 	if err != nil {
 		return err
@@ -149,7 +149,55 @@ func (db *DB) migrate() error {
 	// Migration: backfill manual torrents with seed_time_remaining_ms = 0
 	db.Exec(`UPDATE torrents SET seed_time_remaining_ms = 0 WHERE source = 'manual' AND seed_time_remaining_ms IS NULL`)
 
+	// Migration: migrate stats_log data into stats_snapshots (one-shot)
+	db.migrateStatsLog()
+
 	return nil
+}
+
+// migrateStatsLog migrates data from stats_log into stats_snapshots, then drops stats_log.
+func (db *DB) migrateStatsLog() {
+	// Check if stats_log table exists
+	var tableName string
+	err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='stats_log'").Scan(&tableName)
+	if err != nil {
+		return // stats_log doesn't exist, nothing to migrate
+	}
+
+	// Only migrate if stats_snapshots is empty
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM stats_snapshots").Scan(&count)
+	if count == 0 {
+		// Check if stats_log has any data
+		var logCount int
+		db.QueryRow("SELECT COUNT(*) FROM stats_log").Scan(&logCount)
+		if logCount > 0 {
+			_, err := db.Exec(`
+				INSERT INTO stats_snapshots (timestamp, total_uploaded, total_leechers, total_seeders)
+				SELECT bucket, SUM(max_uploaded), SUM(max_leechers), SUM(max_seeders)
+				FROM (
+					SELECT
+						strftime('%Y-%m-%dT%H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER)/5)*5) || ':00Z' AS bucket,
+						torrent_id,
+						MAX(uploaded_total) AS max_uploaded,
+						MAX(leechers) AS max_leechers,
+						MAX(seeders) AS max_seeders
+					FROM stats_log
+					GROUP BY bucket, torrent_id
+				)
+				GROUP BY bucket
+				ORDER BY bucket
+			`)
+			if err != nil {
+				log.Printf("[database] stats_log migration error: %v", err)
+				return
+			}
+			log.Printf("[database] migrated %d stats_log entries into stats_snapshots", logCount)
+		}
+	}
+
+	// Drop stats_log table
+	db.Exec("DROP TABLE IF EXISTS stats_log")
 }
 
 // TorrentRow represents a torrent record in the database.
@@ -362,15 +410,6 @@ type AnnounceLogRow struct {
 	ErrorMsg     string
 }
 
-// InsertStatsLog records a stats snapshot.
-func (db *DB) InsertStatsLog(torrentID, uploadedTotal int64, leechers, seeders int) error {
-	_, err := db.Exec(
-		`INSERT INTO stats_log (torrent_id, uploaded_total, leechers, seeders) VALUES (?, ?, ?, ?)`,
-		torrentID, uploadedTotal, leechers, seeders,
-	)
-	return err
-}
-
 // StatsHistoryPoint represents an aggregated stats point.
 type StatsHistoryPoint struct {
 	Timestamp     string `json:"timestamp"`
@@ -379,30 +418,25 @@ type StatsHistoryPoint struct {
 	TotalSeeders  int    `json:"totalSeeders"`
 }
 
-// GetStatsHistory returns aggregated upload stats over time (last 24h, grouped by 5-min intervals).
-func (db *DB) GetStatsHistory(hours int) ([]StatsHistoryPoint, error) {
+// InsertStatsSnapshot records an aggregated stats snapshot.
+func (db *DB) InsertStatsSnapshot(totalUploaded int64, totalLeechers, totalSeeders int) error {
+	_, err := db.Exec(
+		`INSERT INTO stats_snapshots (total_uploaded, total_leechers, total_seeders) VALUES (?, ?, ?)`,
+		totalUploaded, totalLeechers, totalSeeders,
+	)
+	return err
+}
+
+// GetStatsSnapshots returns stats snapshots for the last N hours.
+func (db *DB) GetStatsSnapshots(hours int) ([]StatsHistoryPoint, error) {
 	if hours <= 0 {
 		hours = 24
 	}
 	rows, err := db.Query(`
-		SELECT
-			bucket,
-			SUM(max_uploaded) AS total_uploaded,
-			SUM(max_leechers) AS total_leechers,
-			SUM(max_seeders) AS total_seeders
-		FROM (
-			SELECT
-				strftime('%Y-%m-%dT%H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5) || ':00Z' AS bucket,
-				torrent_id,
-				MAX(uploaded_total) AS max_uploaded,
-				MAX(leechers) AS max_leechers,
-				MAX(seeders) AS max_seeders
-			FROM stats_log
-			WHERE timestamp > datetime('now', ?)
-			GROUP BY bucket, torrent_id
-		)
-		GROUP BY bucket
-		ORDER BY bucket
+		SELECT timestamp, total_uploaded, total_leechers, total_seeders
+		FROM stats_snapshots
+		WHERE timestamp > datetime('now', ?)
+		ORDER BY timestamp
 	`, fmt.Sprintf("-%d hours", hours))
 	if err != nil {
 		return nil, err

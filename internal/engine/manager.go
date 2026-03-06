@@ -296,6 +296,10 @@ func (m *Manager) bandwidthDispatcher(ctx context.Context) {
 	redistTicker := time.NewTicker(30 * time.Second)
 	defer redistTicker.Stop()
 
+	// Snapshot stats every 5 minutes for the dashboard graph
+	snapshotTicker := time.NewTicker(5 * time.Minute)
+	defer snapshotTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -305,7 +309,45 @@ func (m *Manager) bandwidthDispatcher(ctx context.Context) {
 			m.distributeBandwidth()
 		case <-redistTicker.C:
 			m.distributeBandwidth()
+		case <-snapshotTicker.C:
+			m.writeStatsSnapshot()
 		}
+	}
+}
+
+// writeStatsSnapshot aggregates current stats across all sessions and inactive torrents, then writes a snapshot.
+func (m *Manager) writeStatsSnapshot() {
+	m.mu.Lock()
+	var totalUploaded int64
+	var totalLeechers, totalSeeders int
+	activeIDs := make(map[int64]bool, len(m.sessions))
+	for id, s := range m.sessions {
+		activeIDs[id] = true
+		s.mu.Lock()
+		totalUploaded += s.Uploaded
+		totalLeechers += s.lastLeechers
+		totalSeeders += s.lastSeeders
+		s.mu.Unlock()
+	}
+	m.mu.Unlock()
+
+	// Add inactive torrents from DB
+	torrents, err := m.db.ListTorrents()
+	if err == nil {
+		for _, t := range torrents {
+			if activeIDs[t.ID] {
+				continue
+			}
+			if state, err := m.db.GetAnnounceState(t.ID); err == nil {
+				totalUploaded += state.Uploaded
+				totalLeechers += state.LastLeechers
+				totalSeeders += state.LastSeeders
+			}
+		}
+	}
+
+	if err := m.db.InsertStatsSnapshot(totalUploaded, totalLeechers, totalSeeders); err != nil {
+		log.Printf("[manager] stats snapshot error: %v", err)
 	}
 }
 

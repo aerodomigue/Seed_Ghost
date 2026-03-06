@@ -503,10 +503,6 @@ func (s *Session) doAnnounce(event string) {
 		if s.db != nil {
 			s.db.InsertAnnounceLog(s.TorrentID, res.trackerURL, event, delta,
 				s.lastLeechers, s.lastSeeders, s.lastInterval, status, errMsg)
-
-			if status == "success" {
-				s.db.InsertStatsLog(s.TorrentID, s.Uploaded, s.lastLeechers, s.lastSeeders)
-			}
 		}
 		s.mu.Unlock()
 	}

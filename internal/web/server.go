@@ -327,7 +327,7 @@ func (s *Server) handleStatsHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	points, err := s.db.GetStatsHistory(hours)
+	points, err := s.db.GetStatsSnapshots(hours)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
