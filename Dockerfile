@@ -18,11 +18,12 @@ RUN CGO_ENABLED=0 go build -o seedghost ./cmd/seedghost/
 
 # Stage 3: Runtime
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates su-exec tzdata
 WORKDIR /app
 COPY --from=backend /app/seedghost .
 COPY --from=backend /app/internal/client/profiles ./profiles
-RUN mkdir -p /app/data
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh && mkdir -p /app/data
 
 ENV SEEDGHOST_LISTEN_ADDR=:8333
 ENV SEEDGHOST_DB_PATH=/app/data/seedghost.db
@@ -33,4 +34,4 @@ EXPOSE 8333
 
 VOLUME ["/app/data"]
 
-ENTRYPOINT ["./seedghost"]
+ENTRYPOINT ["/app/entrypoint.sh"]
