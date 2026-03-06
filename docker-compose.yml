@@ -6,11 +6,16 @@ services:
       - "8333:8333"
     volumes:
       - seedghost-data:/app/data
+      - seedghost-profiles:/app/profiles
     environment:
-      - SEEDGHOST_LISTEN_ADDR=:8333
+      - TZ=${TZ}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - SEEDGHOST_LISTEN_ADDR=${SEEDGHOST_LISTEN_ADDR:-8333}
       - SEEDGHOST_PROWLARR_URL=${PROWLARR_URL:-}
       - SEEDGHOST_PROWLARR_API_KEY=${PROWLARR_API_KEY:-}
     restart: unless-stopped
 
 volumes:
   seedghost-data:
+  seedghost-profiles:
