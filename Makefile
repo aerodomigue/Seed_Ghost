@@ -39,7 +39,7 @@ test-frontend: ## Run frontend tests
 test-all: test test-frontend ## Run all tests (backend + frontend)
 
 docker: ## Build Docker image
-	docker build -t seedghost .
+	docker build --build-arg APP_VERSION="$$(git describe --tags 2>/dev/null || echo dev) $$(git rev-parse --short HEAD)" -t seedghost .
 
 up: ## Start with docker compose
 	docker compose up -d
