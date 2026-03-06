@@ -508,6 +508,12 @@ func (db *DB) GetRatioTargets() (map[string]float64, error) {
 	return targets, rows.Err()
 }
 
+// DeleteRatioTarget removes a ratio target for a tracker host.
+func (db *DB) DeleteRatioTarget(trackerHost string) error {
+	_, err := db.Exec("DELETE FROM ratio_targets WHERE tracker_host = ?", trackerHost)
+	return err
+}
+
 // ProwlarrIndexerRow represents a saved Prowlarr indexer selection.
 type ProwlarrIndexerRow struct {
 	ID                   int64    `json:"id"`

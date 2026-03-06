@@ -428,6 +428,19 @@ func (s *Server) handleRatioTargets(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "invalid JSON", http.StatusBadRequest)
 			return
 		}
+		existing, err := s.db.GetRatioTargets()
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for host := range existing {
+			if _, ok := targets[host]; !ok {
+				if err := s.db.DeleteRatioTarget(host); err != nil {
+					jsonError(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
 		for host, ratio := range targets {
 			if err := s.db.UpsertRatioTarget(host, ratio); err != nil {
 				jsonError(w, err.Error(), http.StatusInternalServerError)
