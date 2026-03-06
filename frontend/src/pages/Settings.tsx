@@ -24,6 +24,8 @@ export default function Settings() {
 
   const [newHost, setNewHost] = useState('')
   const [newRatio, setNewRatio] = useState(2.0)
+  const [editedTargets, setEditedTargets] = useState<Record<string, number>>({})
+  const [ratiosDirty, setRatiosDirty] = useState(false)
 
   useEffect(() => {
     if (settings) {
@@ -38,6 +40,13 @@ export default function Settings() {
       setLogRetention(settings.logRetentionDays)
     }
   }, [settings])
+
+  useEffect(() => {
+    if (ratioTargets) {
+      setEditedTargets(ratioTargets)
+      setRatiosDirty(false)
+    }
+  }, [ratioTargets])
 
   const handleSave = async () => {
     try {
@@ -72,8 +81,29 @@ export default function Settings() {
   const handleAddRatioTarget = async () => {
     if (!newHost) return
     try {
-      await updateRatioTargets({ ...ratioTargets, [newHost]: newRatio })
+      await updateRatioTargets({ ...editedTargets, [newHost]: newRatio })
       setNewHost('')
+      refreshRatios()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save')
+    }
+  }
+
+  const handleDeleteRatioTarget = async (host: string) => {
+    const copy = { ...editedTargets }
+    delete copy[host]
+    try {
+      await updateRatioTargets(copy)
+      refreshRatios()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete')
+    }
+  }
+
+  const handleSaveRatios = async () => {
+    try {
+      await updateRatioTargets(editedTargets)
+      setRatiosDirty(false)
       refreshRatios()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save')
@@ -214,23 +244,54 @@ export default function Settings() {
         <h3 className="text-sm font-medium text-dark-400">Ratio Targets</h3>
         <p className="text-xs text-dark-500">Set a target ratio per tracker. Seeding stops when the target is reached.</p>
 
-        {ratioTargets && Object.keys(ratioTargets).length > 0 && (
+        {Object.keys(editedTargets).length > 0 && (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-dark-800 text-dark-400">
                 <th className="text-left py-2">Tracker Host</th>
                 <th className="text-right py-2">Target Ratio</th>
+                <th className="w-10"></th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(ratioTargets).map(([host, ratio]) => (
+              {Object.entries(editedTargets).map(([host, ratio]) => (
                 <tr key={host} className="border-b border-dark-800/50">
                   <td className="py-2">{host}</td>
-                  <td className="py-2 text-right font-mono">{ratio}</td>
+                  <td className="py-2 text-right">
+                    <input
+                      type="number"
+                      value={ratio}
+                      onChange={(e) => {
+                        setEditedTargets((prev) => ({ ...prev, [host]: parseFloat(e.target.value) || 0 }))
+                        setRatiosDirty(true)
+                      }}
+                      step={0.5}
+                      min={0.1}
+                      className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-sm text-right font-mono"
+                    />
+                  </td>
+                  <td className="py-2 text-center">
+                    <button
+                      onClick={() => handleDeleteRatioTarget(host)}
+                      className="text-dark-500 hover:text-red-400 text-sm px-1"
+                      title="Remove"
+                    >
+                      ✕
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        )}
+
+        {ratiosDirty && (
+          <button
+            onClick={handleSaveRatios}
+            className="px-4 py-2 bg-ghost-600 text-white rounded hover:bg-ghost-700 text-sm font-medium"
+          >
+            Save Ratios
+          </button>
         )}
 
         <div className="flex gap-2 items-end">
