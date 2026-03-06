@@ -20,7 +20,11 @@ Torrent ratio boosting tool that emulates BitTorrent clients by sending tracker 
 docker run -d \
   --name seedghost \
   -p 8333:8333 \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -e TZ=Europe/Paris \
   -v seedghost-data:/app/data \
+  -v seedghost-profiles:/app/profiles \
   ghcr.io/aerodomigue/seed_ghost:latest
 ```
 
@@ -37,13 +41,18 @@ services:
       - "8333:8333"
     volumes:
       - seedghost-data:/app/data
+      - seedghost-profiles:/app/profiles
     environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Paris
       - SEEDGHOST_PROWLARR_URL=http://prowlarr:9696
       - SEEDGHOST_PROWLARR_API_KEY=your-api-key
     restart: unless-stopped
 
 volumes:
   seedghost-data:
+  seedghost-profiles:
 ```
 
 ## Configuration
@@ -52,12 +61,16 @@ volumes:
 
 | Variable | Default | Description |
 |---|---|---|
+| `PUID` | `1000` | User ID for the container process |
+| `PGID` | `1000` | Group ID for the container process |
+| `TZ` | *(empty)* | Timezone (e.g. `Europe/Paris`) |
 | `SEEDGHOST_LISTEN_ADDR` | `:8333` | HTTP listen address |
 | `SEEDGHOST_DB_PATH` | `data/seedghost.db` | SQLite database path |
 | `SEEDGHOST_PROFILES_DIR` | `profiles` | Client profiles directory |
 | `SEEDGHOST_DATA_DIR` | `data` | Data directory (torrent files, etc.) |
 | `SEEDGHOST_PROWLARR_URL` | *(empty)* | Prowlarr server URL |
 | `SEEDGHOST_PROWLARR_API_KEY` | *(empty)* | Prowlarr API key |
+| `SEEDGHOST_FORCE_INIT` | `false` | Force re-initialization of bundled profiles on startup |
 
 All other settings (upload/download speed limits, default client, auto-start, log retention, Prowlarr fetch interval, etc.) are configured through the web UI Settings page.
 
