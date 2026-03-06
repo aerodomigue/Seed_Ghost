@@ -386,12 +386,21 @@ func (db *DB) GetStatsHistory(hours int) ([]StatsHistoryPoint, error) {
 	}
 	rows, err := db.Query(`
 		SELECT
-			strftime('%Y-%m-%dT%H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5) || ':00Z' AS bucket,
-			SUM(uploaded_total) AS total_uploaded,
-			SUM(leechers) AS total_leechers,
-			SUM(seeders) AS total_seeders
-		FROM stats_log
-		WHERE timestamp > datetime('now', ?)
+			bucket,
+			SUM(max_uploaded) AS total_uploaded,
+			SUM(max_leechers) AS total_leechers,
+			SUM(max_seeders) AS total_seeders
+		FROM (
+			SELECT
+				strftime('%Y-%m-%dT%H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5) || ':00Z' AS bucket,
+				torrent_id,
+				MAX(uploaded_total) AS max_uploaded,
+				MAX(leechers) AS max_leechers,
+				MAX(seeders) AS max_seeders
+			FROM stats_log
+			WHERE timestamp > datetime('now', ?)
+			GROUP BY bucket, torrent_id
+		)
 		GROUP BY bucket
 		ORDER BY bucket
 	`, fmt.Sprintf("-%d hours", hours))
