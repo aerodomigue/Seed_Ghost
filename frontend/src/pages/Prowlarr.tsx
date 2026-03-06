@@ -131,7 +131,7 @@ export default function Prowlarr() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Prowlarr Integration</h2>
 
-      <div className="bg-dark-900 border border-dark-800 rounded-lg p-6 space-y-4 max-w-xl">
+      <div className="bg-dark-900 border border-dark-800 rounded-lg p-6 space-y-4">
         <h3 className="text-sm font-medium text-dark-400">Configuration</h3>
         <div>
           <label className="block text-xs text-dark-500 mb-1">Prowlarr URL</label>

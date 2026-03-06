@@ -83,7 +83,7 @@ export default function Settings() {
   const profileNames = profiles ? Object.keys(profiles) : []
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <h2 className="text-2xl font-bold">Settings</h2>
 
       <div className="bg-dark-900 border border-dark-800 rounded-lg p-6 space-y-4">
