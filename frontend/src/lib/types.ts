@@ -6,7 +6,8 @@ export interface Torrent {
   trackerUrl: string
   clientProfile: string
   active: boolean
-  status: 'stopped' | 'pending' | 'downloading' | 'seeding'
+  status: 'stopped' | 'pending' | 'downloading' | 'seeding' | 'error' | 'deleted'
+  errorMsg?: string
   addedAt: string
   source: string
   uploaded: number
@@ -18,6 +19,7 @@ export interface Torrent {
   seeders: number
   indexerId: number | null
   seedTimeRemainingMs: number
+  deletedAt?: string
 }
 
 export interface StatsOverview {

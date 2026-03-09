@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"strings"
+
 	"github.com/aerodomigue/Seed_Ghost/internal/announce"
 	"github.com/aerodomigue/Seed_Ghost/internal/client"
 	"github.com/aerodomigue/Seed_Ghost/internal/database"
@@ -51,6 +53,10 @@ type Session struct {
 
 	// Seed time countdown (nil = manual torrent, skip decrement)
 	seedTimeRemainingMs *int64
+
+	// Tracker error tracking
+	lastError      string // last tracker error/failure message (empty = no error)
+	markedForRemoval bool // true when tracker says torrent is deleted/unregistered
 
 	// For announce logging
 	uploadedAtLastAnnounce int64
@@ -225,6 +231,20 @@ func (s *Session) GetSeedTimeRemainingMs() *int64 {
 	}
 	v := *s.seedTimeRemainingMs
 	return &v
+}
+
+// GetLastError returns the last tracker error message (empty = no error).
+func (s *Session) GetLastError() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastError
+}
+
+// IsMarkedForRemoval returns true if the tracker indicated the torrent is deleted.
+func (s *Session) IsMarkedForRemoval() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.markedForRemoval
 }
 
 // GetSeeders returns the current seeder count for this session.
@@ -462,6 +482,8 @@ func (s *Session) doAnnounce(event string) {
 
 	// Process results — use best successful response for leechers/seeders
 	bestLeechers := -1
+	anySuccess := false
+	lastErrMsg := ""
 	for res := range results {
 		s.mu.Lock()
 		status := "success"
@@ -471,11 +493,14 @@ func (s *Session) doAnnounce(event string) {
 			log.Printf("[session %d] announce error (%s): %v", s.TorrentID, res.trackerURL, res.err)
 			status = "error"
 			errMsg = res.err.Error()
+			lastErrMsg = errMsg
 		} else if res.resp.FailureMsg != "" {
 			log.Printf("[session %d] tracker failure (%s): %s", s.TorrentID, res.trackerURL, res.resp.FailureMsg)
 			status = "error"
 			errMsg = res.resp.FailureMsg
+			lastErrMsg = errMsg
 		} else {
+			anySuccess = true
 			if res.resp.Interval > 0 {
 				s.lastInterval = res.resp.Interval
 			}
@@ -507,6 +532,37 @@ func (s *Session) doAnnounce(event string) {
 		}
 		s.mu.Unlock()
 	}
+
+	// Update error state: clear on any success, set on all-fail
+	s.mu.Lock()
+	if anySuccess {
+		s.lastError = ""
+	} else if lastErrMsg != "" {
+		s.lastError = lastErrMsg
+		if isDeletedError(lastErrMsg) {
+			s.markedForRemoval = true
+			log.Printf("[session %d] torrent appears deleted on tracker: %s", s.TorrentID, lastErrMsg)
+		}
+	}
+	s.mu.Unlock()
+}
+
+// isDeletedError returns true if the error message indicates the torrent was deleted/unregistered.
+func isDeletedError(msg string) bool {
+	lower := strings.ToLower(msg)
+	patterns := []string{
+		"torrent has been deleted",
+		"torrent not found",
+		"torrent not registered",
+		"unregistered torrent",
+		"not registered",
+	}
+	for _, p := range patterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Session) saveState() {
