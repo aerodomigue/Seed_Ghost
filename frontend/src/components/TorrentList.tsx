@@ -92,7 +92,9 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
                 </td>
                 <td className="py-3 px-2">
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                    t.status === 'seeding'
+                    t.status === 'error'
+                      ? 'bg-red-900/50 text-red-400'
+                      : t.status === 'seeding'
                       ? 'bg-green-900/50 text-green-400'
                       : t.status === 'downloading'
                       ? 'bg-blue-900/50 text-blue-400'
@@ -100,8 +102,13 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
                       ? 'bg-yellow-900/50 text-yellow-400'
                       : 'bg-dark-800 text-dark-400'
                   }`}>
-                    {t.status === 'seeding' ? 'Seeding' : t.status === 'downloading' ? 'Downloading' : t.status === 'pending' ? 'Pending' : 'Stopped'}
+                    {t.status === 'error' ? 'Error' : t.status === 'seeding' ? 'Seeding' : t.status === 'downloading' ? 'Downloading' : t.status === 'pending' ? 'Pending' : 'Stopped'}
                   </span>
+                  {t.status === 'error' && t.errorMsg && (
+                    <div className="text-xs text-red-400/70 truncate max-w-[8rem] mt-0.5" title={t.errorMsg}>
+                      {t.errorMsg}
+                    </div>
+                  )}
                 </td>
                 <td className="py-3 px-2 text-right">
                   <div className="flex gap-1 justify-end">
