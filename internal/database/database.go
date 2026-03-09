@@ -149,6 +149,18 @@ func (db *DB) migrate() error {
 	// Migration: backfill manual torrents with seed_time_remaining_ms = 0
 	db.Exec(`UPDATE torrents SET seed_time_remaining_ms = 0 WHERE source = 'manual' AND seed_time_remaining_ms IS NULL`)
 
+	// Migration: create indexer_stats_snapshots table
+	db.Exec(`CREATE TABLE IF NOT EXISTS indexer_stats_snapshots (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		indexer_id INTEGER,
+		indexer_name TEXT NOT NULL,
+		timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		uploaded INTEGER NOT NULL DEFAULT 0,
+		leechers INTEGER NOT NULL DEFAULT 0,
+		seeders INTEGER NOT NULL DEFAULT 0
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_indexer_stats_ts ON indexer_stats_snapshots(timestamp)`)
+
 	// Migration: migrate stats_log data into stats_snapshots (one-shot)
 	db.migrateStatsLog()
 
@@ -587,6 +599,52 @@ func (db *DB) GetIndexerLastFetch(id int64) time.Time {
 // UpdateIndexerLastFetch updates the last fetch time for an indexer.
 func (db *DB) UpdateIndexerLastFetch(id int64, t time.Time) {
 	db.Exec("UPDATE prowlarr_indexers SET last_fetch = ? WHERE id = ?", t, id)
+}
+
+// IndexerStatsSnapshot represents a per-indexer stats snapshot.
+type IndexerStatsSnapshot struct {
+	IndexerID   *int64 `json:"indexerId"`
+	IndexerName string `json:"indexerName"`
+	Timestamp   string `json:"timestamp"`
+	Uploaded    int64  `json:"uploaded"`
+	Leechers    int    `json:"leechers"`
+	Seeders     int    `json:"seeders"`
+}
+
+// InsertIndexerStatsSnapshot records a per-indexer stats snapshot.
+func (db *DB) InsertIndexerStatsSnapshot(indexerID *int64, indexerName string, uploaded int64, leechers, seeders int) error {
+	_, err := db.Exec(
+		`INSERT INTO indexer_stats_snapshots (indexer_id, indexer_name, uploaded, leechers, seeders) VALUES (?, ?, ?, ?, ?)`,
+		indexerID, indexerName, uploaded, leechers, seeders,
+	)
+	return err
+}
+
+// GetIndexerStatsSnapshots returns per-indexer stats snapshots for the last N hours.
+func (db *DB) GetIndexerStatsSnapshots(hours int) ([]IndexerStatsSnapshot, error) {
+	if hours <= 0 {
+		hours = 24
+	}
+	rows, err := db.Query(`
+		SELECT indexer_id, indexer_name, timestamp, uploaded, leechers, seeders
+		FROM indexer_stats_snapshots
+		WHERE timestamp > datetime('now', ?)
+		ORDER BY timestamp
+	`, fmt.Sprintf("-%d hours", hours))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []IndexerStatsSnapshot
+	for rows.Next() {
+		var p IndexerStatsSnapshot
+		if err := rows.Scan(&p.IndexerID, &p.IndexerName, &p.Timestamp, &p.Uploaded, &p.Leechers, &p.Seeders); err != nil {
+			return nil, err
+		}
+		points = append(points, p)
+	}
+	return points, rows.Err()
 }
 
 // GetActiveTorrents returns all torrents with active=1.
