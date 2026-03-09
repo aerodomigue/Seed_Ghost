@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useApi } from '../hooks/useApi'
 import {
   getProwlarrConfig, updateProwlarrConfig, triggerProwlarrFetch,
-  fetchProwlarrIndexers, saveProwlarrIndexers,
+  fetchProwlarrIndexers, saveProwlarrIndexers, getSettings,
   type ProwlarrIndexerFull
 } from '../lib/api'
 
 export default function Prowlarr() {
   const { data: config, refresh } = useApi(getProwlarrConfig)
+  const { data: settings } = useApi(getSettings)
   const [url, setUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [saved, setSaved] = useState(false)
@@ -241,7 +242,7 @@ export default function Prowlarr() {
                           type="number"
                           value={idx.maxUploadSpeedKbs ?? ''}
                           onChange={(e) => setIndexerSpeed(idx.id, e.target.value ? parseInt(e.target.value) : null)}
-                          placeholder="Default"
+                          placeholder={`Default (${settings?.maxUploadSpeedKBs ?? '?'})`}
                           disabled={!idx.selected}
                           className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
@@ -251,7 +252,7 @@ export default function Prowlarr() {
                           type="number"
                           value={idx.fetchIntervalMinutes ?? ''}
                           onChange={(e) => setIndexerFetchInterval(idx.id, e.target.value ? parseInt(e.target.value) : null)}
-                          placeholder="Default"
+                          placeholder={`Default (${settings?.fetchIntervalMinutes ?? '?'})`}
                           disabled={!idx.selected}
                           className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
@@ -261,7 +262,7 @@ export default function Prowlarr() {
                           type="number"
                           value={idx.maxSlots ?? ''}
                           onChange={(e) => setIndexerMaxSlots(idx.id, e.target.value ? parseInt(e.target.value) : null)}
-                          placeholder="Default"
+                          placeholder={`Default (${settings?.prowlarrMaxSlots ?? '?'})`}
                           disabled={!idx.selected}
                           className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
@@ -271,7 +272,7 @@ export default function Prowlarr() {
                           type="number"
                           value={idx.seedTimeHours ?? ''}
                           onChange={(e) => setIndexerSeedTime(idx.id, e.target.value ? parseInt(e.target.value) : null)}
-                          placeholder="72"
+                          placeholder="Default (72)"
                           disabled={!idx.selected}
                           className="w-24 bg-dark-800 border border-dark-700 rounded px-2 py-1 text-xs disabled:opacity-40"
                         />
