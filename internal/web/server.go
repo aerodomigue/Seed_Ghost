@@ -125,7 +125,8 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 		TrackerURL          string  `json:"trackerUrl"`
 		ClientProfile       string  `json:"clientProfile"`
 		Active              bool    `json:"active"`
-		Status              string  `json:"status"` // "stopped", "pending", "downloading", "seeding"
+		Status              string  `json:"status"` // "stopped", "pending", "downloading", "seeding", "error"
+		ErrorMsg            string  `json:"errorMsg,omitempty"`
 		AddedAt             string  `json:"addedAt"`
 		Source              string  `json:"source"`
 		Uploaded            int64   `json:"uploaded"`
@@ -167,7 +168,10 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 			tr.DownloadSpeed = session.GetDownloadSpeed()
 			tr.DownloadComplete = session.IsDownloadComplete()
 			tr.SeedTimeRemainingMs = session.GetSeedTimeRemainingMs()
-			if session.HasAnnounced() {
+			if lastErr := session.GetLastError(); lastErr != "" {
+				tr.Status = "error"
+				tr.ErrorMsg = lastErr
+			} else if session.HasAnnounced() {
 				if !tr.DownloadComplete {
 					tr.Status = "downloading"
 				} else {

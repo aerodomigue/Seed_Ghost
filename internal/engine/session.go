@@ -52,6 +52,9 @@ type Session struct {
 	// Seed time countdown (nil = manual torrent, skip decrement)
 	seedTimeRemainingMs *int64
 
+	// Tracker error tracking
+	lastError string // last tracker error/failure message (empty = no error)
+
 	// For announce logging
 	uploadedAtLastAnnounce int64
 	announced              bool // true after first successful announce
@@ -225,6 +228,13 @@ func (s *Session) GetSeedTimeRemainingMs() *int64 {
 	}
 	v := *s.seedTimeRemainingMs
 	return &v
+}
+
+// GetLastError returns the last tracker error message (empty = no error).
+func (s *Session) GetLastError() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastError
 }
 
 // GetSeeders returns the current seeder count for this session.
@@ -462,6 +472,8 @@ func (s *Session) doAnnounce(event string) {
 
 	// Process results — use best successful response for leechers/seeders
 	bestLeechers := -1
+	anySuccess := false
+	lastErrMsg := ""
 	for res := range results {
 		s.mu.Lock()
 		status := "success"
@@ -471,11 +483,14 @@ func (s *Session) doAnnounce(event string) {
 			log.Printf("[session %d] announce error (%s): %v", s.TorrentID, res.trackerURL, res.err)
 			status = "error"
 			errMsg = res.err.Error()
+			lastErrMsg = errMsg
 		} else if res.resp.FailureMsg != "" {
 			log.Printf("[session %d] tracker failure (%s): %s", s.TorrentID, res.trackerURL, res.resp.FailureMsg)
 			status = "error"
 			errMsg = res.resp.FailureMsg
+			lastErrMsg = errMsg
 		} else {
+			anySuccess = true
 			if res.resp.Interval > 0 {
 				s.lastInterval = res.resp.Interval
 			}
@@ -507,6 +522,15 @@ func (s *Session) doAnnounce(event string) {
 		}
 		s.mu.Unlock()
 	}
+
+	// Update error state: clear on any success, set on all-fail
+	s.mu.Lock()
+	if anySuccess {
+		s.lastError = ""
+	} else if lastErrMsg != "" {
+		s.lastError = lastErrMsg
+	}
+	s.mu.Unlock()
 }
 
 func (s *Session) saveState() {
