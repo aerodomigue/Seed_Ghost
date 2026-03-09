@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { usePolling } from '../hooks/useApi'
-import { getStatsOverview, getTorrents, getStatsHistoryByIndexer } from '../lib/api'
+import { getStatsOverview, getTorrents, getStatsHistoryByIndexer, getSavedProwlarrIndexers } from '../lib/api'
 import { formatBytes, hashColor } from '../lib/utils'
 import StatsCard from '../components/StatsCard'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
@@ -30,6 +30,7 @@ export default function Dashboard() {
   const { data: stats } = usePolling(getStatsOverview, 5000)
   const { data: torrents } = usePolling(getTorrents, 1000)
   const { data: indexerHistory } = usePolling(() => getStatsHistoryByIndexer(24), 10000)
+  const { data: savedIndexers } = usePolling(getSavedProwlarrIndexers, 30000)
 
   const activeTorrents = torrents?.filter((t) => t.active) || []
   const totalLeechers = activeTorrents.reduce((sum, t) => sum + t.leechers, 0)
@@ -37,6 +38,12 @@ export default function Dashboard() {
 
   const indexerNames = useMemo(() => getIndexerNames(indexerHistory || []), [indexerHistory])
   const chartData = useMemo(() => buildChartData(indexerHistory || []), [indexerHistory])
+  const indexerNameMap = useMemo(() => {
+    const map: Record<number, string> = {}
+    for (const idx of savedIndexers || []) map[idx.id] = idx.name
+    return map
+  }, [savedIndexers])
+
   const colors = useMemo(() => {
     const map: Record<string, string> = {}
     for (const name of indexerNames) map[name] = hashColor(name)
@@ -113,9 +120,17 @@ export default function Dashboard() {
         <div className="bg-dark-900 border border-dark-800 rounded-lg p-4">
           <h3 className="text-sm font-medium text-dark-400 mb-3">Active Torrents</h3>
           <div className="space-y-2">
-            {activeTorrents.map((t) => (
+            {activeTorrents.map((t) => {
+              const idxName = t.indexerId ? (indexerNameMap[t.indexerId] ?? 'Manual') : 'Manual'
+              const dotColor = hashColor(idxName)
+              return (
               <div key={t.id} className="flex items-center justify-between py-2 border-b border-dark-800/50 last:border-0">
-                <div className="truncate max-w-md">
+                <div className="flex items-center gap-2 truncate max-w-md">
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: dotColor }}
+                    title={idxName}
+                  />
                   <span className="text-sm">{t.name}</span>
                 </div>
                 <div className="flex gap-4 text-sm text-dark-400">
@@ -123,7 +138,8 @@ export default function Dashboard() {
                   <span>L/S: {t.leechers}/{t.seeders}</span>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import type { Torrent } from '../lib/types'
-import { formatBytes, formatSeedTime } from '../lib/utils'
+import { formatBytes, formatSeedTime, hashColor } from '../lib/utils'
 
 interface TorrentListProps {
   torrents: Torrent[]
@@ -71,13 +71,18 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
                   {t.leechers}/{t.seeders}
                 </td>
                 <td className="py-3 px-2 text-xs">
-                  {t.indexerId != null ? (
-                    <span className="text-ghost-400" title={`Indexer #${t.indexerId}`}>
-                      {indexerMap[t.indexerId] || `#${t.indexerId}`}
-                    </span>
-                  ) : (
-                    <span className="text-dark-500">Manual</span>
-                  )}
+                  {(() => {
+                    const name = t.indexerId != null ? (indexerMap[t.indexerId] || `#${t.indexerId}`) : 'Manual'
+                    return (
+                      <span className="inline-flex items-center gap-1.5" title={t.indexerId != null ? `Indexer #${t.indexerId}` : 'Manual'}>
+                        <span
+                          className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: hashColor(name) }}
+                        />
+                        <span className={t.indexerId != null ? 'text-ghost-400' : 'text-dark-500'}>{name}</span>
+                      </span>
+                    )
+                  })()}
                 </td>
                 <td className="py-3 px-2 text-dark-400 text-xs">{t.clientProfile || '-'}</td>
                 <td className="py-3 px-2 text-xs">
