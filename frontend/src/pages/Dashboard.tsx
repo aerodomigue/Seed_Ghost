@@ -1,23 +1,47 @@
+import { useMemo } from 'react'
 import { usePolling } from '../hooks/useApi'
-import { getStatsOverview, getTorrents, getStatsHistory } from '../lib/api'
-import { formatBytes } from '../lib/utils'
+import { getStatsOverview, getTorrents, getStatsHistoryByIndexer } from '../lib/api'
+import { formatBytes, hashColor } from '../lib/utils'
 import StatsCard from '../components/StatsCard'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import type { IndexerStatsPoint } from '../lib/types'
+
+function buildChartData(points: IndexerStatsPoint[]) {
+  const byTime = new Map<string, Record<string, number>>()
+  for (const p of points) {
+    const time = new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    let row = byTime.get(time)
+    if (!row) {
+      row = { time: 0 } as unknown as Record<string, number>
+      byTime.set(time, row)
+    }
+    row[p.indexerName] = p.uploaded
+  }
+  return Array.from(byTime.entries()).map(([time, row]) => ({ ...row, time }))
+}
+
+function getIndexerNames(points: IndexerStatsPoint[]): string[] {
+  const seen = new Set<string>()
+  for (const p of points) seen.add(p.indexerName)
+  return Array.from(seen).sort()
+}
 
 export default function Dashboard() {
   const { data: stats } = usePolling(getStatsOverview, 5000)
   const { data: torrents } = usePolling(getTorrents, 1000)
-  const { data: history } = usePolling(() => getStatsHistory(24), 10000)
+  const { data: indexerHistory } = usePolling(() => getStatsHistoryByIndexer(24), 10000)
 
   const activeTorrents = torrents?.filter((t) => t.active) || []
   const totalLeechers = activeTorrents.reduce((sum, t) => sum + t.leechers, 0)
   const totalSpeed = activeTorrents.reduce((sum, t) => sum + (t.uploadSpeed ?? 0), 0)
 
-  const chartData = (history || []).map((p) => ({
-    time: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    uploaded: p.totalUploaded,
-    leechers: p.totalLeechers,
-  }))
+  const indexerNames = useMemo(() => getIndexerNames(indexerHistory || []), [indexerHistory])
+  const chartData = useMemo(() => buildChartData(indexerHistory || []), [indexerHistory])
+  const colors = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const name of indexerNames) map[name] = hashColor(name)
+    return map
+  }, [indexerNames])
 
   return (
     <div className="space-y-6">
@@ -59,9 +83,22 @@ export default function Dashboard() {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#111916', border: '1px solid #25342d', borderRadius: 8 }}
                   labelStyle={{ color: '#829a90' }}
-                  formatter={(v: number) => [formatBytes(v), 'Uploaded']}
+                  formatter={(v: number, name: string) => [formatBytes(v), name]}
                 />
-                <Area type="monotone" dataKey="uploaded" stroke="#10b981" fill="#10b981" fillOpacity={0.1} />
+                <Legend
+                  wrapperStyle={{ fontSize: 12, color: '#829a90' }}
+                />
+                {indexerNames.map((name) => (
+                  <Area
+                    key={name}
+                    type="monotone"
+                    dataKey={name}
+                    stroke={colors[name]}
+                    fill={colors[name]}
+                    fillOpacity={0.1}
+                    connectNulls
+                  />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           ) : (

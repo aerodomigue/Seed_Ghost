@@ -45,6 +45,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/torrents/", s.handleTorrentByID)
 	mux.HandleFunc("/api/v1/stats/overview", s.handleStatsOverview)
 	mux.HandleFunc("/api/v1/stats/history", s.handleStatsHistory)
+	mux.HandleFunc("/api/v1/stats/history/by-indexer", s.handleStatsHistoryByIndexer)
 	mux.HandleFunc("/api/v1/settings", s.handleSettings)
 	mux.HandleFunc("/api/v1/logs", s.handleLogs)
 	mux.HandleFunc("/api/v1/ratio-targets", s.handleRatioTargets)
@@ -334,6 +335,30 @@ func (s *Server) handleStatsHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	if points == nil {
 		points = []database.StatsHistoryPoint{}
+	}
+	jsonResponse(w, points)
+}
+
+func (s *Server) handleStatsHistoryByIndexer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	hours := 24
+	if h := r.URL.Query().Get("hours"); h != "" {
+		if v, err := strconv.Atoi(h); err == nil && v > 0 {
+			hours = v
+		}
+	}
+
+	points, err := s.db.GetIndexerStatsSnapshots(hours)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if points == nil {
+		points = []database.IndexerStatsSnapshot{}
 	}
 	jsonResponse(w, points)
 }

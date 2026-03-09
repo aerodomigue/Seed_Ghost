@@ -71,3 +71,12 @@ export interface ProwlarrIndexer {
   enabled: boolean
   maxUploadSpeedKbs: number | null
 }
+
+export interface IndexerStatsPoint {
+  indexerId: number | null
+  indexerName: string
+  timestamp: string
+  uploaded: number
+  leechers: number
+  seeders: number
+}

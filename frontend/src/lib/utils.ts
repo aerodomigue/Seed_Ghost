@@ -19,6 +19,15 @@ export function classNames(...classes: (string | false | undefined)[]): string {
   return classes.filter(Boolean).join(' ')
 }
 
+export function hashColor(name: string): string {
+  let hash = 5381
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) + hash + name.charCodeAt(i)) & 0xffffffff
+  }
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 65%, 55%)`
+}
+
 export function formatSeedTime(remainingMs: number): string {
   const absMs = Math.abs(remainingMs)
   const totalSeconds = Math.floor(absMs / 1000)
