@@ -31,6 +31,7 @@ type Session struct {
 	Port       int
 	Uploaded   int64
 	Downloaded int64
+	IndexerID  *int64
 
 	// Tracking
 	lastInterval   int

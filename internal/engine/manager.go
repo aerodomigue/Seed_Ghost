@@ -349,6 +349,82 @@ func (m *Manager) writeStatsSnapshot() {
 	if err := m.db.InsertStatsSnapshot(totalUploaded, totalLeechers, totalSeeders); err != nil {
 		log.Printf("[manager] stats snapshot error: %v", err)
 	}
+
+	// Per-indexer stats aggregation
+	type indexerStats struct {
+		uploaded int64
+		leechers int
+		seeders  int
+	}
+	// Key: indexer ID (0 = manual/no indexer)
+	perIndexer := make(map[int64]*indexerStats)
+	getKey := func(id *int64) int64 {
+		if id == nil {
+			return 0
+		}
+		return *id
+	}
+
+	// Aggregate from active sessions
+	m.mu.Lock()
+	for _, s := range m.sessions {
+		s.mu.Lock()
+		key := getKey(s.IndexerID)
+		st, ok := perIndexer[key]
+		if !ok {
+			st = &indexerStats{}
+			perIndexer[key] = st
+		}
+		st.uploaded += s.Uploaded
+		st.leechers += s.lastLeechers
+		st.seeders += s.lastSeeders
+		s.mu.Unlock()
+	}
+	m.mu.Unlock()
+
+	// Aggregate from inactive torrents
+	if err == nil {
+		for _, t := range torrents {
+			if activeIDs[t.ID] {
+				continue
+			}
+			if state, err := m.db.GetAnnounceState(t.ID); err == nil {
+				key := getKey(t.IndexerID)
+				st, ok := perIndexer[key]
+				if !ok {
+					st = &indexerStats{}
+					perIndexer[key] = st
+				}
+				st.uploaded += state.Uploaded
+				st.leechers += state.LastLeechers
+				st.seeders += state.LastSeeders
+			}
+		}
+	}
+
+	// Build indexer name map
+	indexerNames := map[int64]string{0: "Manual"}
+	if indexers, err := m.db.GetProwlarrIndexers(); err == nil {
+		for _, idx := range indexers {
+			indexerNames[idx.ID] = idx.Name
+		}
+	}
+
+	// Write per-indexer snapshots
+	for key, st := range perIndexer {
+		name := indexerNames[key]
+		if name == "" {
+			name = fmt.Sprintf("Indexer %d", key)
+		}
+		var idPtr *int64
+		if key != 0 {
+			k := key
+			idPtr = &k
+		}
+		if err := m.db.InsertIndexerStatsSnapshot(idPtr, name, st.uploaded, st.leechers, st.seeders); err != nil {
+			log.Printf("[manager] indexer stats snapshot error: %v", err)
+		}
+	}
 }
 
 func (m *Manager) startSessionFromRow(row *database.TorrentRow) error {
@@ -367,6 +443,7 @@ func (m *Manager) startSessionFromRow(row *database.TorrentRow) error {
 	}
 
 	session := NewSession(row.ID, tor, profile, m.db)
+	session.IndexerID = row.IndexerID
 	session.SetSeedTimeRemaining(row.SeedTimeRemainingMs)
 
 	// Try to restore state from database
