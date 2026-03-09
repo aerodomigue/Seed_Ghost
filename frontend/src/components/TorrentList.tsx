@@ -23,6 +23,7 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-dark-800 text-dark-400">
+            <th className="text-left py-3 px-2 w-14 text-dark-500 font-mono text-xs">ID</th>
             <th className="text-left py-3 px-2">Name</th>
             <th className="text-left py-3 px-2 w-20">Size</th>
             <th className="text-left py-3 px-2 w-20">Uploaded</th>
@@ -43,6 +44,7 @@ export default function TorrentList({ torrents, indexerMap, onStart, onStop, onD
             const ratio = t.totalSize > 0 ? (t.uploaded / t.totalSize).toFixed(2) : '0.00'
             return (
               <tr key={t.id} className="border-b border-dark-800/50 hover:bg-dark-900/50">
+                <td className="py-3 px-2 text-dark-500 font-mono text-xs">{t.id}</td>
                 <td className="py-3 px-2">
                   <div className="font-medium truncate max-w-xs" title={t.name}>{t.name}</div>
                   <div className="text-xs text-dark-500 truncate max-w-xs" title={t.trackerUrl}>
