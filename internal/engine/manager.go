@@ -308,6 +308,7 @@ func (m *Manager) bandwidthDispatcher(ctx context.Context) {
 			m.refreshGlobalSpeed()
 			m.distributeBandwidth()
 		case <-redistTicker.C:
+			m.cleanupRemovedSessions()
 			m.distributeBandwidth()
 		case <-snapshotTicker.C:
 			m.writeStatsSnapshot()
@@ -424,6 +425,35 @@ func (m *Manager) writeStatsSnapshot() {
 		if err := m.db.InsertIndexerStatsSnapshot(idPtr, name, st.uploaded, st.leechers, st.seeders); err != nil {
 			log.Printf("[manager] indexer stats snapshot error: %v", err)
 		}
+	}
+}
+
+// cleanupRemovedSessions removes sessions whose torrents have been deleted on the tracker.
+func (m *Manager) cleanupRemovedSessions() {
+	m.mu.Lock()
+	var toRemove []int64
+	for id, s := range m.sessions {
+		if s.IsMarkedForRemoval() {
+			toRemove = append(toRemove, id)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, id := range toRemove {
+		m.mu.Lock()
+		session, exists := m.sessions[id]
+		if !exists {
+			m.mu.Unlock()
+			continue
+		}
+		errMsg := session.GetLastError()
+		delete(m.sessions, id)
+		m.mu.Unlock()
+
+		session.Stop()
+		m.db.SetTorrentActive(id, false)
+		m.db.DeleteTorrent(id)
+		log.Printf("[manager] auto-removed torrent %d (tracker: %s)", id, errMsg)
 	}
 }
 
