@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Torrent, StatsOverview, Settings, AnnounceLog, ClientProfile } from './types'
+import type { Torrent, StatsOverview, Settings, AnnounceLog, ClientProfile, IndexerStatsPoint } from './types'
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -43,6 +43,11 @@ export interface StatsHistoryPoint {
 
 export async function getStatsHistory(hours = 24): Promise<StatsHistoryPoint[]> {
   const { data } = await api.get('/stats/history', { params: { hours } })
+  return data
+}
+
+export async function getStatsHistoryByIndexer(hours = 24): Promise<IndexerStatsPoint[]> {
+  const { data } = await api.get('/stats/history/by-indexer', { params: { hours } })
   return data
 }
 
