@@ -42,6 +42,7 @@ func (s *Server) Handler() http.Handler {
 
 	// API routes
 	mux.HandleFunc("/api/v1/torrents", s.handleTorrents)
+	mux.HandleFunc("/api/v1/torrents/deleted", s.handleDeletedTorrents)
 	mux.HandleFunc("/api/v1/torrents/", s.handleTorrentByID)
 	mux.HandleFunc("/api/v1/stats/overview", s.handleStatsOverview)
 	mux.HandleFunc("/api/v1/stats/history", s.handleStatsHistory)
@@ -125,7 +126,7 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 		TrackerURL          string  `json:"trackerUrl"`
 		ClientProfile       string  `json:"clientProfile"`
 		Active              bool    `json:"active"`
-		Status              string  `json:"status"` // "stopped", "pending", "downloading", "seeding", "error"
+		Status              string  `json:"status"` // "stopped", "pending", "downloading", "seeding", "error", "deleted"
 		ErrorMsg            string  `json:"errorMsg,omitempty"`
 		AddedAt             string  `json:"addedAt"`
 		Source              string  `json:"source"`
@@ -138,6 +139,7 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 		Seeders             int     `json:"seeders"`
 		IndexerID           *int64  `json:"indexerId"`
 		SeedTimeRemainingMs *int64  `json:"seedTimeRemainingMs"`
+		DeletedAt           string  `json:"deletedAt,omitempty"`
 	}
 
 	var result []torrentResponse
@@ -192,6 +194,74 @@ func (s *Server) listTorrents(w http.ResponseWriter, r *http.Request) {
 
 	if result == nil {
 		result = []torrentResponse{}
+	}
+	jsonResponse(w, result)
+}
+
+func (s *Server) handleDeletedTorrents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	rows, err := s.db.ListDeletedTorrents()
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type deletedTorrentResponse struct {
+		ID                  int64  `json:"id"`
+		InfoHash            string `json:"infoHash"`
+		Name                string `json:"name"`
+		TotalSize           int64  `json:"totalSize"`
+		TrackerURL          string `json:"trackerUrl"`
+		ClientProfile       string `json:"clientProfile"`
+		Active              bool   `json:"active"`
+		Status              string `json:"status"`
+		AddedAt             string `json:"addedAt"`
+		Source              string `json:"source"`
+		Uploaded            int64  `json:"uploaded"`
+		Downloaded          int64  `json:"downloaded"`
+		DownloadComplete    bool   `json:"downloadComplete"`
+		Leechers            int    `json:"leechers"`
+		Seeders             int    `json:"seeders"`
+		IndexerID           *int64 `json:"indexerId"`
+		SeedTimeRemainingMs *int64 `json:"seedTimeRemainingMs"`
+		DeletedAt           string `json:"deletedAt"`
+	}
+
+	var result []deletedTorrentResponse
+	for _, row := range rows {
+		tr := deletedTorrentResponse{
+			ID:                  row.ID,
+			InfoHash:            row.InfoHash,
+			Name:                row.Name,
+			TotalSize:           row.TotalSize,
+			TrackerURL:          row.TrackerURL,
+			ClientProfile:       row.ClientProfile,
+			Active:              false,
+			Status:              "deleted",
+			AddedAt:             row.AddedAt.Format("2006-01-02T15:04:05Z"),
+			Source:              row.Source,
+			IndexerID:           row.IndexerID,
+			SeedTimeRemainingMs: row.SeedTimeRemainingMs,
+		}
+		if row.DeletedAt != nil {
+			tr.DeletedAt = row.DeletedAt.Format("2006-01-02T15:04:05Z")
+		}
+		if state, err := s.db.GetAnnounceState(row.ID); err == nil {
+			tr.Uploaded = state.Uploaded
+			tr.Downloaded = state.Downloaded
+			tr.DownloadComplete = state.Downloaded >= row.TotalSize
+			tr.Leechers = state.LastLeechers
+			tr.Seeders = state.LastSeeders
+		}
+		result = append(result, tr)
+	}
+
+	if result == nil {
+		result = []deletedTorrentResponse{}
 	}
 	jsonResponse(w, result)
 }
@@ -309,6 +379,16 @@ func (s *Server) handleStatsOverview(w http.ResponseWriter, r *http.Request) {
 			totalUploaded += state.Uploaded
 		} else if state, err := s.db.GetAnnounceState(row.ID); err == nil {
 			totalUploaded += state.Uploaded
+		}
+	}
+
+	// Include uploads from deleted torrents
+	deletedRows, err := s.db.ListDeletedTorrents()
+	if err == nil {
+		for _, row := range deletedRows {
+			if state, err := s.db.GetAnnounceState(row.ID); err == nil {
+				totalUploaded += state.Uploaded
+			}
 		}
 	}
 

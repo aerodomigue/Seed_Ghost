@@ -161,6 +161,9 @@ func (db *DB) migrate() error {
 	)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_indexer_stats_ts ON indexer_stats_snapshots(timestamp)`)
 
+	// Migration: add deleted_at to torrents for soft-delete
+	db.Exec("ALTER TABLE torrents ADD COLUMN deleted_at DATETIME")
+
 	// Migration: migrate stats_log data into stats_snapshots (one-shot)
 	db.migrateStatsLog()
 
@@ -226,6 +229,7 @@ type TorrentRow struct {
 	Source               string
 	IndexerID            *int64
 	SeedTimeRemainingMs  *int64
+	DeletedAt            *time.Time
 }
 
 // AnnounceStateRow represents the announce state for a torrent.
@@ -259,12 +263,12 @@ func (db *DB) InsertTorrent(t *TorrentRow) (int64, error) {
 // GetTorrent returns a torrent by ID.
 func (db *DB) GetTorrent(id int64) (*TorrentRow, error) {
 	row := db.QueryRow(
-		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms
-		 FROM torrents WHERE id = ?`, id,
+		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms, deleted_at
+		 FROM torrents WHERE id = ? AND deleted_at IS NULL`, id,
 	)
 	t := &TorrentRow{}
 	err := row.Scan(&t.ID, &t.InfoHash, &t.Name, &t.TotalSize, &t.TrackerURL, &t.TorrentData,
-		&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs)
+		&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs, &t.DeletedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -274,8 +278,8 @@ func (db *DB) GetTorrent(id int64) (*TorrentRow, error) {
 // ListTorrents returns all torrents.
 func (db *DB) ListTorrents() ([]*TorrentRow, error) {
 	rows, err := db.Query(
-		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms
-		 FROM torrents ORDER BY id`,
+		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms, deleted_at
+		 FROM torrents WHERE deleted_at IS NULL ORDER BY id`,
 	)
 	if err != nil {
 		return nil, err
@@ -286,7 +290,7 @@ func (db *DB) ListTorrents() ([]*TorrentRow, error) {
 	for rows.Next() {
 		t := &TorrentRow{}
 		if err := rows.Scan(&t.ID, &t.InfoHash, &t.Name, &t.TotalSize, &t.TrackerURL, &t.TorrentData,
-			&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs); err != nil {
+			&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs, &t.DeletedAt); err != nil {
 			return nil, err
 		}
 		torrents = append(torrents, t)
@@ -296,7 +300,7 @@ func (db *DB) ListTorrents() ([]*TorrentRow, error) {
 
 // DeleteTorrent deletes a torrent by ID.
 func (db *DB) DeleteTorrent(id int64) error {
-	_, err := db.Exec("DELETE FROM torrents WHERE id = ?", id)
+	_, err := db.Exec("UPDATE torrents SET deleted_at = CURRENT_TIMESTAMP, active = 0 WHERE id = ?", id)
 	return err
 }
 
@@ -315,8 +319,8 @@ func (db *DB) UpdateSeedTimeRemaining(id int64, ms int64) error {
 // ListTorrentsByIndexer returns all torrents belonging to a specific indexer.
 func (db *DB) ListTorrentsByIndexer(indexerID int64) ([]*TorrentRow, error) {
 	rows, err := db.Query(
-		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms
-		 FROM torrents WHERE indexer_id = ? ORDER BY id`, indexerID,
+		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms, deleted_at
+		 FROM torrents WHERE indexer_id = ? AND deleted_at IS NULL ORDER BY id`, indexerID,
 	)
 	if err != nil {
 		return nil, err
@@ -327,7 +331,7 @@ func (db *DB) ListTorrentsByIndexer(indexerID int64) ([]*TorrentRow, error) {
 	for rows.Next() {
 		t := &TorrentRow{}
 		if err := rows.Scan(&t.ID, &t.InfoHash, &t.Name, &t.TotalSize, &t.TrackerURL, &t.TorrentData,
-			&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs); err != nil {
+			&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs, &t.DeletedAt); err != nil {
 			return nil, err
 		}
 		torrents = append(torrents, t)
@@ -650,8 +654,8 @@ func (db *DB) GetIndexerStatsSnapshots(hours int) ([]IndexerStatsSnapshot, error
 // GetActiveTorrents returns all torrents with active=1.
 func (db *DB) GetActiveTorrents() ([]*TorrentRow, error) {
 	rows, err := db.Query(
-		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms
-		 FROM torrents WHERE active = 1 ORDER BY id`,
+		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms, deleted_at
+		 FROM torrents WHERE active = 1 AND deleted_at IS NULL ORDER BY id`,
 	)
 	if err != nil {
 		return nil, err
@@ -662,7 +666,30 @@ func (db *DB) GetActiveTorrents() ([]*TorrentRow, error) {
 	for rows.Next() {
 		t := &TorrentRow{}
 		if err := rows.Scan(&t.ID, &t.InfoHash, &t.Name, &t.TotalSize, &t.TrackerURL, &t.TorrentData,
-			&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs); err != nil {
+			&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs, &t.DeletedAt); err != nil {
+			return nil, err
+		}
+		torrents = append(torrents, t)
+	}
+	return torrents, rows.Err()
+}
+
+// ListDeletedTorrents returns all soft-deleted torrents.
+func (db *DB) ListDeletedTorrents() ([]*TorrentRow, error) {
+	rows, err := db.Query(
+		`SELECT id, info_hash, name, total_size, tracker_url, torrent_data, client_profile, active, added_at, source, indexer_id, seed_time_remaining_ms, deleted_at
+		 FROM torrents WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var torrents []*TorrentRow
+	for rows.Next() {
+		t := &TorrentRow{}
+		if err := rows.Scan(&t.ID, &t.InfoHash, &t.Name, &t.TotalSize, &t.TrackerURL, &t.TorrentData,
+			&t.ClientProfile, &t.Active, &t.AddedAt, &t.Source, &t.IndexerID, &t.SeedTimeRemainingMs, &t.DeletedAt); err != nil {
 			return nil, err
 		}
 		torrents = append(torrents, t)

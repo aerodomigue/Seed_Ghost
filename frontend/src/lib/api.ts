@@ -21,6 +21,11 @@ export async function deleteTorrent(id: number): Promise<void> {
   await api.delete(`/torrents/${id}`)
 }
 
+export async function getDeletedTorrents(): Promise<Torrent[]> {
+  const { data } = await api.get('/torrents/deleted')
+  return data
+}
+
 export async function startTorrent(id: number): Promise<void> {
   await api.post(`/torrents/${id}/start`)
 }
